@@ -3,11 +3,29 @@
 
 import pobjects
 
+class M:
+  def F():
+    pass
+
+class N(M):
+  @override
+  def F():
+    pass
+
+assert type(N) is type
+
+class E(Exception):
+  @final
+  def Eoo():
+    pass
+
 class A:
   #__metaclass__ = type
   @final
   def Foo():
     pass
+
+assert type(A) is not type
 
 class B(A):
   def Foo():

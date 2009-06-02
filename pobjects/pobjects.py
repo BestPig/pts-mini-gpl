@@ -5,11 +5,10 @@
 #
 # pobjects works in python2.4 and python2.5.
 #
+# TODO(pts): Add decorators to properties / descriptors.
 
-import linecache
 import re
 import sys
-import traceback
 import types
 
 class AbstractMethodError(Exception):
@@ -74,49 +73,75 @@ def _UnwrapFunction(fwrap):
     return None, None
 
 
-def _GetCurrentClassInfo(f, error_prefix=''):
-  """Return (metaclass, bases) pair for a class being defined in frame f."""
-  # !! cache the result, reuse for subsequent methods.
-  file_name = f.f_back.f_code.co_filename
-  line_number = f.f_back.f_lineno
-  linecache.checkcache(file_name)
-  line = linecache.getline(file_name, line_number)
-  if not line:
-    raise BadDecoration(
-        '%sline %d of file %r not found'
-        (error_prefix, line_number, file_name))
-  #print 'DDD', decorator.func_name, full_method_name, repr(line)
-  # TODO(pts): Accept multiline class definitions, with comments.
-  # TODO(pts): Special error message for old-style class definition.
-  match = re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*'
-                   r'\(([,. \t\w]+)\)[ \t]*:[ \t]*(?:#.*)?$', line)
-  if not match:
-    if not re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*:'
-                r'[ \t]*(?:#.*)?$', line):
+class _OldStyleClass:
+  pass
+
+
+class _MetaClassProxy(object):
+  def __init__(self, orig_metaclass):
+    self.orig_metaclass = orig_metaclass
+    # List of dicts describing decorators applying to methods in this class,
+    # see pobject_decorator below.
+    self.decorators = []
+
+  def __call__(self, class_name, bases, dict_obj):
+    decorator_names = set([decorator['decorator_name']
+                           for decorator in self.decorators])
+    if not decorator_names or (
+        isinstance(self.orig_metaclass, type) and
+        issubclass(self.orig_metaclass, _PObjectMeta)):
+      return self.orig_metaclass(class_name, bases, dict_obj)
+    if 'final' not in decorator_names and 'finalim' not in decorator_names:
+      CheckDecorators(class_name, bases, dict_obj)
+      if not [1 for base in bases
+              if not isinstance(base, type(_OldStyleClass))]:
+        # Avoid `TypeError: Error when calling the metaclass bases;
+        # a new-style class can't have only classic bases'.
+        bases += (object,)
+      return self.orig_metaclass(class_name, bases, dict_obj)
+    # We have @final and/or @finalim among the decorators we want to apply.
+    # Since these have affect on subclasses, we have to set up _PObjectMeta
+    # as the metaclass in order to get CheckDecorators called when a
+    # subclass is created.
+    error_prefix = '; '.join([
+        'decorator @%s in file %r, line %s cannot be applied to %s' %
+        (decorator['decorator_name'], decorator['file_name'],
+        decorator['line_number'], decorator['full_method_name'])
+        for decorator in self.decorators])
+    full_class_name = '%s.%s' % (dict_obj['__module__'], class_name)
+    if (not isinstance(self.orig_metaclass, type) or
+        not issubclass(_PObjectMeta, self.orig_metaclass)):
       raise BadDecoration(
-          '%sline %d of file %r (%r) does not contain a valid class def' %
-          (error_prefix, line_number, file_name, line))
-    bases = []
-  else:
-    if match.group(1) != f.f_code.co_name:
-      raise BadDecoration(
-          '%sline %d of file %r (%r) does not define class %s' %
-          (error_prefix, line_number, file_name, line, f.f_code.co_name))
-    bases = _ParseClassNameList(
-        spec=match.group(2), f_globals=f.f_back.f_globals,
-        f_builtins=f.f_back.f_builtins)
-    if bases is None:
-      raise BadDecoration(
-          '%sline %d of file %r (%r) has unparsable superclass list %r' %
-          (error_prefix, line_number, file_name, line, match.group(2)))
-  if '__metaclass__' in f.f_locals:
-    # This doesn't work if the __metaclass__ assignment is later than us.
-    metaclass = f.f_locals['__metaclass__']
-  elif bases and issubclass(type(bases[0]), type):  # new-style class
-    metaclass = type(bases[0])
-  else:
-    metaclass = None  # old-style class
-  return metaclass, bases, line_number, file_name, line
+          '%s; because the specified %s.__metaclass__ (%s) is not a superclass '
+          'of _PObjectMeta' %
+         (error_prefix, full_class_name, self.orig_metaclass))
+    # This for loop is to give a better error message than:
+    # TypeError: Error when calling the metaclass bases:: metaclass
+    # conflict: the metaclass of a derived class must be a (non-strict)
+    # subclass of the metaclasses of all its bases
+    #bases = (type(re.compile('a').scanner('abc')),)
+    old_base_count = 0
+    for base in bases:
+      if isinstance(base, type(_OldStyleClass)):
+        old_base_count += 1
+      elif not isinstance(base, type):
+        # TODO(pts): exactly how to trigger this
+        # Counterexamples: base == float; base == str; regexp match.
+        # Examples: Exception.
+        raise BadDecoration(
+            '%s; because superclass %s is not a pure class' %
+            (error_prefix, base))
+      elif not issubclass(_PObjectMeta, type(base)) or 1:
+        raise BadDecoration(
+            '%s; because superclass %s has metaclass %s, '
+            'which conflicts with _PObjectMeta' %
+            (error_prefix, base, type(base)))
+    if old_base_count == len(bases):
+      # Avoid `TypeError: Error when calling the metaclass bases;
+      # a new-style class can't have only classic bases'.
+      # TODO(pts): Test this with exceptions.
+      bases += (object,)
+    return _PObjectMeta(class_name, bases, dict_obj)
 
 
 def pobject_decorator(decorator):
@@ -137,24 +162,18 @@ def pobject_decorator(decorator):
     module_name = f.f_locals['__module__']
     full_method_name = '%s.%s.%s' % (
         module_name, f.f_code.co_name, function.func_name)
-    error_prefix = 'decorator @%s cannot be applied to %s, because ' % (
-        decorator.func_name, full_method_name)
-    metaclass, bases, line_number, file_name, line = _GetCurrentClassInfo(
-        f, error_prefix=error_prefix)
-    if not metaclass or not issubclass(metaclass, _PObjectMeta):
-      # This for loop is to give a better error message than:
-      # TypeError: Error when calling the metaclass bases:: metaclass
-      # conflict: the metaclass of a derived class must be a (non-strict)
-      # subclass of the metaclasses of all its bases
-      for base in bases:
-        if (issubclass(type(base), type) and
-            not issubclass(_PObjectMeta, type(base))):
-          raise BadDecoration(
-              '%sline %d of file %r (%r) specifies superclass %s, which '
-              'has conflicting metaclass %s.'
-              (error_prefix, line_number, file_name, line, base, type(base)))
-      # This silently upgrades an old-style class to a new-style class.
-      f.f_locals['__metaclass__'] = metaclass = _PObjectMeta
+    # `type' below silently upgrades an old-style class to a new-style class.
+    metaclass = f.f_locals.get('__metaclass__') or type
+    if not isinstance(metaclass, _MetaClassProxy):
+      # TODO(pts): Document that this doesn't work if __metaclass__ is
+      # assigned after the first decorated method.
+      f.f_locals['__metaclass__'] = metaclass = _MetaClassProxy(metaclass)
+    metaclass.decorators.append({
+        'decorator_name': decorator.func_name,
+        'full_method_name': full_method_name,
+        'file_name': f.f_code.co_filename,
+        'line_number': f.f_lineno,
+    })
     decorated_function = decorator(
         function=function, full_method_name=full_method_name)
     #print (decorator.func_name, decorated_function, function, wrapper)
@@ -239,55 +258,58 @@ def _DumpSuperClassList(bases):
         ['%s.%s' % (base.__module__, base.__name__) for base in bases])
 
 
+def CheckDecorators(class_name, bases, dict_obj):
+  """Raise BadMethod if the new class is inconsistent with some decorators."""
+  module = dict_obj['__module__']
+  for name in sorted(dict_obj):
+    function, _ = _UnwrapFunction(dict_obj[name])
+    if isinstance(function, types.FunctionType):
+      #print (class_name, name)
+      if getattr(function, '_is_nosuper', None):
+        bases_with_name = [base for base in bases if hasattr(base, name)]
+        if bases_with_name:
+          # Unfortunately, we don't get the method definition line in the
+          # traceback. TODO(pts): Somehow forge it.
+          raise BadMethod(
+              '@nosuper method %s.%s.%s defined in %s' %
+              (module, class_name, name,
+               _DumpSuperClassList(bases_with_name)))
+      if getattr(function, '_is_override', None):
+        bases_with_name = [base for base in bases if hasattr(base, name)]
+        if not bases_with_name:
+          # TODO(pts): report line numbers (elsewhere etc.)
+          raise BadMethod(
+              '@override method %s.%s.%s not defined in %s' %
+              (module, class_name, name, _DumpSuperClassList(bases)))
+      # We don't need any special casing for getattr(..., '_is_final', None) below
+      # if getattr(base, name) is an ``instancemethod'' created from a
+      # classmethod or a function. This is because an instancemathod
+      # automirorrs all attributes of its im_func.
+      bases_with_final = [
+          base for base in bases if hasattr(base, name) and
+          getattr(getattr(base, name), '_is_final', None)]
+      if bases_with_final:
+        raise BadMethod(
+            'method %s.%s.%s overrides @final method in %s' %
+              (module, class_name, name,
+               _DumpSuperClassList(bases_with_final)))
+      if function is dict_obj[name]:  # function is instance method
+        bases_with_finalim = [
+            base for base in bases if hasattr(base, name) and
+            getattr(getattr(base, name), '_is_finalim', None)]
+        if bases_with_finalim:
+          raise BadMethod(
+              'instance method %s.%s.%s overrides @finalim method in %s' %
+                (module, class_name, name,
+                 _DumpSuperClassList(bases_with_finalim)))
+
+
 class _PObjectMeta(type):
   def __new__(cls, class_name, bases, dict_obj):
     # cls is _PObjectMeta here.
     #print ('NewClass', cls, class_name, bases, dict_obj)
-    module = dict_obj['__module__']
-    for name in sorted(dict_obj):
-      function, _ = _UnwrapFunction(dict_obj[name])
-      if isinstance(function, types.FunctionType):
-        #print (class_name, name)
-        if getattr(function, '_is_nosuper', None):
-          bases_with_name = [base for base in bases if hasattr(base, name)]
-          if bases_with_name:
-            # Unfortunately, we don't get the method definition line in the
-            # traceback. TODO(pts): Somehow forge it.
-            raise BadMethod(
-                '@nosuper method %s.%s.%s defined in %s' %
-                (module, class_name, name,
-                 _DumpSuperClassList(bases_with_name)))
-        if getattr(function, '_is_override', None):
-          bases_with_name = [base for base in bases if hasattr(base, name)]
-          if not bases_with_name:
-            raise BadMethod(
-                '@override method %s.%s.%s not defined in %s' %
-                (module, class_name, name, _DumpSuperClassList(bases)))
-        # We don't need any special casing for getattr(..., '_is_final', None) below
-        # if getattr(base, name) is an ``instancemethod'' created from a
-        # classmethod or a function. This is because an instancemathod
-        # automirorrs all attributes of its im_func.
-        bases_with_final = [
-            base for base in bases if hasattr(base, name) and
-            getattr(getattr(base, name), '_is_final', None)]
-        if bases_with_final:
-          raise BadMethod(
-              'method %s.%s.%s overrides @final method in %s' %
-                (module, class_name, name,
-                 _DumpSuperClassList(bases_with_final)))
-        if function is dict_obj[name]:  # function is instance method
-          bases_with_finalim = [
-              base for base in bases if hasattr(base, name) and
-              getattr(getattr(base, name), '_is_finalim', None)]
-          if bases_with_finalim:
-            raise BadMethod(
-                'instance method %s.%s.%s overrides @finalim method in %s' %
-                  (module, class_name, name,
-                   _DumpSuperClassList(bases_with_finalim)))
-
-    obj = type.__new__(cls, class_name, bases, dict_obj)
-    #print 'NEW', obj, dir(obj)
-    return obj
+    CheckDecorators(class_name, bases, dict_obj)
+    return type.__new__(cls, class_name, bases, dict_obj)
 
 class pobject(object):
   __metaclass__ = _PObjectMeta  # be type(pobjects) == _PObjectMeta, not type  

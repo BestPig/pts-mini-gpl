@@ -74,6 +74,51 @@ def _UnwrapFunction(fwrap):
     return None, None
 
 
+def _GetCurrentClassInfo(f, error_prefix=''):
+  """Return (metaclass, basis) pair for a class being defined in frame f."""
+  # !! cache
+  file_name = f.f_back.f_code.co_filename
+  line_number = f.f_back.f_lineno
+  linecache.checkcache(file_name)
+  line = linecache.getline(file_name, line_number)
+  if not line:
+    raise BadDecoration(
+        '%sline %d of file %r not found'
+        (error_prefix, line_number, file_name))
+  #print 'DDD', decorator.func_name, full_method_name, repr(line)
+  # TODO(pts): Accept multiline class definitions, with comments.
+  # TODO(pts): Special error message for old-style class definition.
+  match = re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*'
+                   r'\(([,. \t\w]+)\)[ \t]*:[ \t]*(?:#.*)?$', line)
+  if not match:
+    if not re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*:'
+                r'[ \t]*(?:#.*)?$', line):
+      raise BadDecoration(
+          '%sline %d of file %r (%r) does not contain a valid class def' %
+          (error_prefix, line_number, file_name, line))
+    bases = []
+  else:
+    if match.group(1) != f.f_code.co_name:
+      raise BadDecoration(
+          '%sline %d of file %r (%r) does not define class %s' %
+          (error_prefix, line_number, file_name, line, f.f_code.co_name))
+    bases = _ParseClassNameList(
+        spec=match.group(2), f_globals=f.f_back.f_globals,
+        f_builtins=f.f_back.f_builtins)
+    if bases is None:
+      raise BadDecoration(
+          '%sline %d of file %r (%r) has unparsable superclass list %r' %
+          (error_prefix, line_number, file_name, line, match.group(2)))
+  if '__metaclass__' in f.f_locals:
+    # This doesn't work if the __metaclass__ assignment is later than us.
+    metaclass = f.f_locals['__metaclass__']
+  elif bases and issubclass(type(bases[0]), type):  # new-style class
+    metaclass = type(bases[0])
+  else:
+    metaclass = None  # old-style class
+  return metaclass, bases, line_number, file_name, line
+
+
 def pobject_decorator(decorator):
   #print 'MMM', decorator.func_name
   def ApplyDecorator(fwrap):
@@ -87,62 +132,29 @@ def pobject_decorator(decorator):
     if '__module__' not in f.f_locals:
       raise BadDecoration(
           'decorator @%s cannot be applied to function %s in %s, '
-          'because the latter is not a new class' %
+          'because the latter is not a class definition' %
           (decorator.func_name, function.func_name, f.f_code.co_name))
     module_name = f.f_locals['__module__']
     full_method_name = '%s.%s.%s' % (
         module_name, f.f_code.co_name, function.func_name)
-    file_name = f.f_back.f_code.co_filename
-    line_number = f.f_back.f_lineno
-    linecache.checkcache(file_name)
-    line = linecache.getline(file_name, line_number)
-    if not line:
-      raise BadDecoration(
-          'decorator @%s cannot be applied to %s, '
-          'because line %d of file %r not found'
-          (decorator.func_name, full_method_name, line_number,
-           file_name))
-    #print 'DDD', decorator.func_name, full_method_name, repr(line)
-    # TODO(pts): Accept multiline class definitions, with comments.
-    # TODO(pts): Special error message for old-style class definition.
-    match = re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*'
-                     r'\(([,. \t\w]+)\)[ \t]*:[ \t]*(?:#.*)?$', line)
-    if not match:
-      if re.match(r'[ \t]*class[ \t]+([_A-Za-z]\w*)[ \t]*:'
-                  r'[ \t]*(?:#.*)?$', line):
-        raise BadDecoration(
-            'decorator @%s cannot be applied to %s, '
-            'because line %d of file %r (%r) is old-style. '
-            'Solve this by inheriting from pobject.' %
-            (decorator.func_name, full_method_name, line_number,
-             file_name, line))
-      raise BadDecoration(
-          'decorator @%s cannot be applied to %s, '
-          'because line %d of file %r (%r) does not contain a valid class def' %
-          (decorator.func_name, full_method_name, line_number,
-           file_name, line))
-    if match.group(1) != f.f_code.co_name:
-      raise BadDecoration(
-          'decorator @%s cannot be applied to %s, '
-          'because line %d of file %r (%r) does not define class %s' %
-          (decorator.func_name, full_method_name, line_number,
-           file_name, line, f.f_code.co_name))
-    bases = _ParseClassNameList(
-        spec=match.group(2), f_globals=f.f_back.f_globals,
-        f_builtins=f.f_back.f_builtins)
-    if bases is None:
-      raise BadDecoration(
-          'decorator @%s cannot be applied to %s, '
-          'because line %d of file %r (%r) has unparsable superclass list %r' %
-          (decorator.func_name, full_method_name, line_number,
-           file_name, line, match.group(2)))
-    if not issubclass(type(bases[0]), _PObjectMeta):
-      raise BadDecoration(
-          'decorator @%s cannot be applied to %s, '
-          'because line %d of file %r (%r) implies in improper metaclass. '
-          'Solve this by inheriting from pobject.' %
-          (decorator.func_name, full_method_name, line_number,
-           file_name, line))
+    error_prefix = 'decorator @%s cannot be applied to %s, because ' % (
+        decorator.func_name, full_method_name)
+    metaclass, bases, line_number, file_name, line = _GetCurrentClassInfo(
+        f, error_prefix=error_prefix)
+    if not metaclass or not issubclass(metaclass, _PObjectMeta):
+      # This for loop is to give a better error message than:
+      # TypeError: Error when calling the metaclass bases:: metaclass
+      # conflict: the metaclass of a derived class must be a (non-strict)
+      # subclass of the metaclasses of all its bases
+      for base in bases:
+        if (issubclass(type(base), type) and
+            not issubclass(_PObjectMeta, type(base))):
+          raise BadDecoration(
+              '%sline %d of file %r (%r) specifies superclass %s, which '
+              'has conflicting metaclass %s.'
+              (error_prefix, line_number, file_name, line, base, type(base)))
+      # This silently upgrades an old-style class to a new-style class.
+      f.f_locals['__metaclass__'] = metaclass = _PObjectMeta
     decorated_function = decorator(
         function=function, full_method_name=full_method_name)
     #print (decorator.func_name, decorated_function, function, wrapper)

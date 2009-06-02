@@ -282,7 +282,9 @@ inline void add_string_entry(struct list_head *string_list_head,
 {
         struct string_list *s;
         size_t prefix_len=strlen(prefix);
+#if 0
         printk(KERN_ERR "rfsdelta: add_string_entry string=(%s)\n", string);
+#endif
         if ( (s = kmalloc(sizeof(struct string_list), GFP_KERNEL)) == NULL) {
                 printk(KERN_ERR "rfsdelta: add_string_entry:"
                                 " memory allocation error.\n");

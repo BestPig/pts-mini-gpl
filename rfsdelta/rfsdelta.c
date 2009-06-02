@@ -1126,7 +1126,8 @@ static int rfsdelta_inode_link (struct dentry * old_dentry,
                                struct inode *dir, 
                                struct dentry * dentry)
 {
-  	insert_path( dentry, 'l' );
+  	insert_path( old_dentry, 'k' );
+  	insert_path_low( dentry, old_dentry, 'l' );
   	return 0;
 }
 

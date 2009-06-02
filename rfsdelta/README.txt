@@ -137,11 +137,15 @@ Each item in the queue is a null-terminated string. Details:
    "u" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <pathname> "\0"
 
    If the last link to a file is about to be removed, <nlink> is reported to
-   be `1'.
+   be 1.
 
 -- for the new inode of link():
 
-   "l" <dev> ",?:" <devname> ":/" <pathname> "\0"
+   "k" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <existing-pathname> "\0"
+   "l" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <new-pathname> "\0"
+
+   The <nlink> value reported is the number of links to that inode before
+   the new link() is created.
 
 -- for the new inode of symlink():
 
@@ -157,7 +161,8 @@ Each item in the queue is a null-terminated string. Details:
    "a" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <new-pathname> "\0"
 
 All events are reported _before_ they take place. That's the reason why
-mkdir() cannot report `ino'.
+mkdir() cannot report `ino'. This should also be noted when examining
+the <nlink> field.
 
 The following operations are not reported by rfsdelta:
 

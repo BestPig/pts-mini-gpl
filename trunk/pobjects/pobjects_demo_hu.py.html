@@ -1,0 +1,347 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/1999/REC-html401-19991224/strict.dtd">
+<html>
+<head>
+<META http-equiv=Content-Type content="text/html; charset=UTF-8">
+<title>Exported from Notepad++</title>
+<style type="text/css">
+span {
+	font-family: 'Courier New';
+	font-size: 10pt;
+	color: #000000;
+}
+.sc0 {
+}
+.sc1 {
+	color: #008000;
+}
+.sc2 {
+	color: #FF0000;
+}
+.sc4 {
+	color: #808080;
+}
+.sc5 {
+	font-weight: bold;
+	color: #0000FF;
+}
+.sc7 {
+}
+.sc8 {
+	font-weight: bold;
+}
+.sc9 {
+	color: #FF00FF;
+}
+.sc10 {
+	font-weight: bold;
+	color: #000080;
+}
+.sc11 {
+}
+.sc14 {
+}
+.sc15 {
+}
+</style>
+</head>
+<body>
+<div style="float: left; white-space: pre; line-height: 1; background: #FFFFFF; "><span class="sc11">Szab</span><span class="sc0">ó </span><span class="sc11">P</span><span class="sc0">é</span><span class="sc11">ter</span><span class="sc0"> </span><span class="sc10">&lt;</span><span class="sc11">pts</span><span class="sc15">@fazekas.hu</span><span class="sc10">&gt;</span><span class="sc0">       </span><span class="sc2">2009</span><span class="sc10">-</span><span class="sc2">05</span><span class="sc10">-</span><span class="sc2">27</span><span class="sc0">            </span><span class="sc11">budapest</span><span class="sc10">.</span><span class="sc11">py</span><span class="sc0">
+
+</span><span class="sc1"># --- célok</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc15">@abstract</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">F</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">pass</span><span class="sc0">  </span><span class="sc1"># dobjon AbstractMethodError-t híváskor</span><span class="sc0">
+
+  </span><span class="sc15">@override</span><span class="sc0">  </span><span class="sc1"># dobjon kivételt definiáláskor</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">G</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+  </span><span class="sc15">@final</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Bar</span><span class="sc10">(</span><span class="sc11">Foo</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">  </span><span class="sc1"># dobjon kivételt definiáláskor</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc1"># Egyeb megvalósítandó szolgáltatások:</span><span class="sc0">
+</span><span class="sc1"># @nosuper: @override ellentéte</span><span class="sc0">
+</span><span class="sc1"># @finalim: alosztályban csak @classmethod vagy @staticmethod lehet</span><span class="sc0">
+
+
+</span><span class="sc1"># --- eszköz: dekorátor (decorator):</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">Change</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">a</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">b</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">a</span><span class="sc0"> </span><span class="sc10">*</span><span class="sc0"> </span><span class="sc11">b</span><span class="sc0">
+
+</span><span class="sc15">@Change</span><span class="sc10">(</span><span class="sc2">6</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc2">7</span><span class="sc10">)</span><span class="sc0">
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">F</span><span class="sc10">(</span><span class="sc11">x</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">y</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">z</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc2">0</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">x</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">y</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">z</span><span class="sc10">)</span><span class="sc0">
+
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">F</span><span class="sc0">           </span><span class="sc1">#: 42</span><span class="sc0">
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">F</span><span class="sc10">(</span><span class="sc2">2</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc2">3</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc2">4</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1">#: hiba: F nem függvény</span><span class="sc0">
+
+</span><span class="sc15">@Change</span><span class="sc0">  </span><span class="sc1">#: SyntaxError: csak def-et lehet dekorálni</span><span class="sc0">
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">pass</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+</span><span class="sc1"># --- hasznos beépített dekorátorok (1/2)</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Rectangle</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">__init__</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">width</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">_width</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc11">width</span><span class="sc10">)</span><span class="sc0">
+    </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">_height</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc11">height</span><span class="sc10">)</span><span class="sc0">
+
+  </span><span class="sc15">@staticmethod</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc11">x</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc14">float</span><span class="sc10">(</span><span class="sc11">x</span><span class="sc10">)</span><span class="sc0">
+    </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0"> </span><span class="sc10">&gt;</span><span class="sc0"> </span><span class="sc2">0</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+  </span><span class="sc15">@property</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">width</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">_width</span><span class="sc0">
+
+  </span><span class="sc15">@property</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">height</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">_height</span><span class="sc0">
+
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">Rectangle</span><span class="sc10">.</span><span class="sc11">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc2">42</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1">#: 42.0</span><span class="sc0">
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">Rectangle</span><span class="sc10">(</span><span class="sc2">8</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc2">9</span><span class="sc10">).</span><span class="sc11">width</span><span class="sc0">  </span><span class="sc1">#: 8</span><span class="sc0">
+
+
+
+</span><span class="sc1"># --- hasznos beépített dekorátorok (2/2)</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">LandscapeRectangle</span><span class="sc10">(</span><span class="sc11">Rectangle</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">__init__</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">width</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc10">):</span><span class="sc0">
+        </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">CheckLandscape</span><span class="sc10">(</span><span class="sc11">width</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc10">)</span><span class="sc0">
+    </span><span class="sc11">Rectangle</span><span class="sc10">.</span><span class="sc11">__init__</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">width</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc10">)</span><span class="sc0">
+
+  </span><span class="sc15">@classmethod</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">CheckLandscape</span><span class="sc10">(</span><span class="sc11">cls</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">width</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc11">width</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">cls</span><span class="sc10">.</span><span class="sc11">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc11">width</span><span class="sc10">)</span><span class="sc0">
+    </span><span class="sc11">height</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">cls</span><span class="sc10">.</span><span class="sc11">CheckPositiveDimension</span><span class="sc10">(</span><span class="sc11">height</span><span class="sc10">)</span><span class="sc0">
+    </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc11">width</span><span class="sc0"> </span><span class="sc10">&gt;=</span><span class="sc0"> </span><span class="sc11">height</span><span class="sc0">
+
+</span><span class="sc11">LandscapeRectangle</span><span class="sc10">.</span><span class="sc11">CheckLandscape</span><span class="sc10">(</span><span class="sc2">6</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc2">7</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1"># AssertionError</span><span class="sc0">
+
+</span><span class="sc1"># * A @property egy ún. descriptor-t hoz létre, lásd még</span><span class="sc0">
+</span><span class="sc1">#   http://users.rcn.com/python/download/Descriptor.htm</span><span class="sc0">
+</span><span class="sc1"># * A def mindig függvényt hoz létre, ami osztály definiálásakor</span><span class="sc0">
+</span><span class="sc1">#   instancemethod-dá alakul. Más típusúak nem alakulnak át.</span><span class="sc0">
+</span><span class="sc1"># * Amit a @classmethod és a @staticmethod visszaad, az már nem</span><span class="sc0">
+</span><span class="sc1">#   függvény (hanem classmethod ill. staticmethod típusú), ezért</span><span class="sc0">
+</span><span class="sc1">#   nem is alakul át osztály definiálásakor.</span><span class="sc0">
+
+
+</span><span class="sc1"># --- @abstract megvalósítása dekorátorral</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">AbstractMethodError</span><span class="sc10">(</span><span class="sc11">Exception</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">pass</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">abstract</span><span class="sc10">(</span><span class="sc11">func</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">AbstractFunction</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">raise</span><span class="sc0"> </span><span class="sc11">AbstractMethodError</span><span class="sc10">(</span><span class="sc4">'%s.%s.%s'</span><span class="sc0"> </span><span class="sc10">%</span><span class="sc0">
+            </span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">__module__</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">self</span><span class="sc10">.</span><span class="sc11">__name__</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">func</span><span class="sc10">.</span><span class="sc11">func_name</span><span class="sc10">))</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">AbstractFunction</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</span><span class="sc1"># --- @override megvalósítási ötlete</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">override</span><span class="sc10">(</span><span class="sc11">func</span><span class="sc10">)</span><span class="sc0">
+  </span><span class="sc5">import</span><span class="sc0"> </span><span class="sc11">sys</span><span class="sc0">
+  </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc10">[</span><span class="sc11">s</span><span class="sc0"> </span><span class="sc5">for</span><span class="sc0"> </span><span class="sc11">s</span><span class="sc0"> </span><span class="sc5">in</span><span class="sc0"> </span><span class="sc11">GetSuperClasses</span><span class="sc10">(</span><span class="sc11">sys</span><span class="sc10">.</span><span class="sc11">_getframe</span><span class="sc10">().</span><span class="sc11">f_back</span><span class="sc10">)</span><span class="sc0">
+          </span><span class="sc5">if</span><span class="sc0"> </span><span class="sc11">hasattr</span><span class="sc10">(</span><span class="sc11">s</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">func</span><span class="sc10">.</span><span class="sc11">func_name</span><span class="sc10">)],</span><span class="sc0"> </span><span class="sc4">'@override mismatch'</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">func</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">GetSuperClasses</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1"># f: frame objektum</span><span class="sc0">
+  </span><span class="sc5">while</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">:</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_code</span><span class="sc10">.</span><span class="sc11">co_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_code</span><span class="sc10">.</span><span class="sc11">co_filename</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_lineno</span><span class="sc10">,</span><span class="sc0">
+               </span><span class="sc11">sorted</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_locals</span><span class="sc10">),</span><span class="sc0"> </span><span class="sc11">sorted</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_globals</span><span class="sc10">),</span><span class="sc0">
+                   </span><span class="sc11">sorted</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_builtins</span><span class="sc10">))</span><span class="sc0">
+    </span><span class="sc11">f</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_back</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc10">...</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+</span><span class="sc1"># --- GetSuperClasses megvalósítása</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">GetSuperClasses</span><span class="sc10">(</span><span class="sc11">f</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1"># f: frame objektum</span><span class="sc0">
+  </span><span class="sc5">import</span><span class="sc0"> </span><span class="sc11">linecache</span><span class="sc0">
+  </span><span class="sc1"># az f a metódus def-je</span><span class="sc0">
+  </span><span class="sc1"># az f.f_back az osztálydefiníció (class)</span><span class="sc0">
+  </span><span class="sc11">file_name</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_back</span><span class="sc10">.</span><span class="sc11">f_code</span><span class="sc10">.</span><span class="sc11">co_filename</span><span class="sc0">
+  </span><span class="sc11">line_number</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_back</span><span class="sc10">.</span><span class="sc11">f_lineno</span><span class="sc0">
+  </span><span class="sc11">linecache</span><span class="sc10">.</span><span class="sc11">checkcache</span><span class="sc10">(</span><span class="sc11">file_name</span><span class="sc10">)</span><span class="sc0">
+  </span><span class="sc11">line</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">linecache</span><span class="sc10">.</span><span class="sc11">getline</span><span class="sc10">(</span><span class="sc11">file_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">line_number</span><span class="sc10">)</span><span class="sc0">
+  </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc11">line</span><span class="sc0">
+  </span><span class="sc5">import</span><span class="sc0"> </span><span class="sc11">re</span><span class="sc0">
+  </span><span class="sc11">match</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">re</span><span class="sc10">.</span><span class="sc11">match</span><span class="sc10">(</span><span class="sc4">r'\s*class\s+...'</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">line</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc11">match</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc10">[...]</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+</span><span class="sc1"># --- a @final problémája</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc15">@final</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Bar</span><span class="sc10">(</span><span class="sc11">Foo</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">  </span><span class="sc1"># dobjon kivételt</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc1"># a Bar.H-ban a Foo.H @final dekorátorának kéne a kivételt dobnia</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+
+
+
+</span><span class="sc1"># --- metaclass</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">MyMeta</span><span class="sc10">(</span><span class="sc11">type</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">__new__</span><span class="sc10">(</span><span class="sc11">cls</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">class_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">dict_obj</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">class_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">sorted</span><span class="sc10">(</span><span class="sc11">dict_obj</span><span class="sc10">))</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">type</span><span class="sc10">.</span><span class="sc11">__new__</span><span class="sc10">(</span><span class="sc11">cls</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">class_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">dict_obj</span><span class="sc10">)</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">A</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">M</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+        
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">B</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc11">__metaclass__</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">MyMeta</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">M</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">C</span><span class="sc10">(</span><span class="sc11">B</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">M</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">L</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc1">#: ('B', (&lt;type 'object'&gt;,), ['M', '__metaclass__', '__module__'])</span><span class="sc0">
+</span><span class="sc1">#: ('C', (&lt;class '__main__.B'&gt;,), ['L', 'M', '__module__'])</span><span class="sc0">
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">type</span><span class="sc10">(</span><span class="sc11">A</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1">#: &lt;type 'type'&gt;</span><span class="sc0">
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">type</span><span class="sc10">(</span><span class="sc11">B</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1">#: &lt;class '__main__.MyMeta'&gt;</span><span class="sc0">
+</span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">type</span><span class="sc10">(</span><span class="sc11">C</span><span class="sc10">)</span><span class="sc0">  </span><span class="sc1">#: &lt;class '__main__.MyMeta'&gt;</span><span class="sc0">
+
+
+</span><span class="sc1"># --- @final megvalósítása metaclass-szal</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">final</span><span class="sc10">(</span><span class="sc11">func</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc11">func</span><span class="sc10">.</span><span class="sc11">_is_final</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">True</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">func</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">ClassCheckMeta</span><span class="sc10">(</span><span class="sc11">type</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">__new__</span><span class="sc10">(</span><span class="sc11">cls</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">class_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">dict_obj</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">for</span><span class="sc0"> </span><span class="sc11">s</span><span class="sc0"> </span><span class="sc5">in</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">:</span><span class="sc0">
+      </span><span class="sc5">assert</span><span class="sc0"> </span><span class="sc5">not</span><span class="sc0"> </span><span class="sc10">[</span><span class="sc11">a</span><span class="sc0"> </span><span class="sc5">for</span><span class="sc0"> </span><span class="sc11">a</span><span class="sc0"> </span><span class="sc5">in</span><span class="sc0"> </span><span class="sc11">dir</span><span class="sc10">(</span><span class="sc11">s</span><span class="sc10">)</span><span class="sc0"> </span><span class="sc5">and</span><span class="sc0"> </span><span class="sc11">name</span><span class="sc0"> </span><span class="sc5">in</span><span class="sc0"> </span><span class="sc11">dict_obj</span><span class="sc0"> </span><span class="sc5">and</span><span class="sc0">
+                  </span><span class="sc11">getattr</span><span class="sc10">(</span><span class="sc11">s</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc4">'_is_final'</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc5">None</span><span class="sc10">)]</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">type</span><span class="sc10">.</span><span class="sc11">__new__</span><span class="sc10">(</span><span class="sc11">cls</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">class_name</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">bases</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">dict_obj</span><span class="sc10">)</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc11">__metaclass__</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">ClassCheckMeta</span><span class="sc0">
+  </span><span class="sc15">@final</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Bar</span><span class="sc10">(</span><span class="sc11">Foo</span><span class="sc10">):</span><span class="sc0">  </span><span class="sc1"># kivételt dob</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+
+
+
+</span><span class="sc1"># --- ha a felhasználó elfelejti a __metaclass__-t</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">(</span><span class="sc11">object</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc15">@final</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Bar</span><span class="sc10">(</span><span class="sc11">Foo</span><span class="sc10">):</span><span class="sc0">  </span><span class="sc1"># sajnos átcsúszik kivétel nélkül</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">H</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0"> </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+</span><span class="sc1"># Jó megoldási ötlet:</span><span class="sc0">
+
+</span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">final</span><span class="sc10">(</span><span class="sc11">func</span><span class="sc10">):</span><span class="sc0">
+  </span><span class="sc5">import</span><span class="sc0"> </span><span class="sc11">sys</span><span class="sc0">
+  </span><span class="sc11">f</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">sys</span><span class="sc10">.</span><span class="sc11">_getframe</span><span class="sc10">().</span><span class="sc11">f_back</span><span class="sc0">
+  </span><span class="sc11">f</span><span class="sc10">.</span><span class="sc11">f_locals</span><span class="sc10">[</span><span class="sc4">'__metaclass__'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">ClassCheckMeta</span><span class="sc0">  </span><span class="sc1"># általánosítandó</span><span class="sc0">
+  </span><span class="sc11">func</span><span class="sc10">.</span><span class="sc11">_is_final</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">True</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc11">func</span><span class="sc0">
+
+</span><span class="sc1"># Ugyan a metaclass kiváltja az @override-hoz szükséges</span><span class="sc0">
+</span><span class="sc1"># linecache-t, viszont linecache a final általánosításához</span><span class="sc0">
+</span><span class="sc1"># kelleni fog.</span><span class="sc0">
+
+
+
+</span><span class="sc1"># --- hogy ne kelljen @pobjects.override-ot írni</span><span class="sc0">
+
+</span><span class="sc1"># pobjects.py-ban:</span><span class="sc0">
+</span><span class="sc11">__builtins__</span><span class="sc10">[</span><span class="sc4">'final'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">final</span><span class="sc0">
+</span><span class="sc11">__builtins__</span><span class="sc10">[</span><span class="sc4">'finalim'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">finalim</span><span class="sc0">
+</span><span class="sc11">__builtins__</span><span class="sc10">[</span><span class="sc4">'nosuper'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">nosuper</span><span class="sc0">
+</span><span class="sc11">__builtins__</span><span class="sc10">[</span><span class="sc4">'abstract'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">abstract</span><span class="sc0">
+</span><span class="sc11">__builtins__</span><span class="sc10">[</span><span class="sc4">'override'</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">override</span><span class="sc0">
+
+</span><span class="sc1"># example.py-ban:</span><span class="sc0">
+</span><span class="sc5">import</span><span class="sc0"> </span><span class="sc11">pobjects</span><span class="sc0">
+</span><span class="sc5">class</span><span class="sc0"> </span><span class="sc8">Foo</span><span class="sc10">:</span><span class="sc0">
+  </span><span class="sc15">@override</span><span class="sc0">  </span><span class="sc1"># a közös __builtins__-ből véve</span><span class="sc0">
+  </span><span class="sc5">def</span><span class="sc0"> </span><span class="sc9">G</span><span class="sc10">(</span><span class="sc11">self</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc10">):</span><span class="sc0">
+    </span><span class="sc5">print</span><span class="sc0"> </span><span class="sc11">x</span><span class="sc0">
+
+
+
+
+
+
+
+</span><span class="sc7">"""Vége."""</span><span class="sc0">
+
+
+
+
+
+
+
+
+
+</span></div></body>
+</html>

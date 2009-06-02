@@ -9,4 +9,8 @@ class A:
   def Foo():
     pass
 
-print type(A)
+class B(A):
+  def Foo():
+    pass
+
+#print type(A)

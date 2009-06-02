@@ -1,0 +1,450 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"
+  "http://www.w3.org/TR/REC-html40/loose.dtd">
+<HTML><HEAD>
+<TITLE>PTetriS.java.html [eNTitánok: Kincskereső Kisgömböc]</TITLE>
+  <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-2">
+  <META NAME="GENERATOR" CONTENT="pts@fazekas.hu [hu] (joe) [notepad]">
+  <SSI COUNTER="">
+  <STYLE><!--
+  .bg10 { background-color: #4f607f }
+  .bg11 { background-color: #7f90af }
+  .bg23 { background-color: #ff0000 }
+
+  .noul { text-decoration: none }
+--></STYLE>
+</HEAD>
+
+<BODY BGCOLOR="#ffffff" TEXT="#000000" VLINK="#00007f" ALINK="#00007f" LINK="#00007f"><PRE><FONT COLOR="#007f00">/*&nbsp;PTetriS.java&nbsp;--&nbsp;PTetriS&nbsp;v0.3,&nbsp;a&nbsp;really&nbsp;minimalistic&nbsp;Tetris&nbsp;clone
+&nbsp;*&nbsp;(C)&nbsp;&lt;pts@fazekas.hu&gt;&nbsp;in&nbsp;Early&nbsp;October&nbsp;2001.
+&nbsp;*
+&nbsp;*&nbsp;This&nbsp;is&nbsp;a&nbsp;JDK1.1&nbsp;applet&nbsp;and&nbsp;application,&nbsp;and&nbsp;does&nbsp;graphics&nbsp;with&nbsp;Java&nbsp;AWT.
+&nbsp;*&nbsp;See&nbsp;EOF&nbsp;for&nbsp;revision&nbsp;history.
+&nbsp;*
+&nbsp;*&nbsp;This&nbsp;program&nbsp;is&nbsp;free&nbsp;software;&nbsp;you&nbsp;can&nbsp;redistribute&nbsp;it&nbsp;and/or&nbsp;modify
+&nbsp;*&nbsp;it&nbsp;under&nbsp;the&nbsp;terms&nbsp;of&nbsp;the&nbsp;GNU&nbsp;General&nbsp;Public&nbsp;License&nbsp;as&nbsp;published&nbsp;by
+&nbsp;*&nbsp;the&nbsp;Free&nbsp;Software&nbsp;Foundation;&nbsp;either&nbsp;version&nbsp;2&nbsp;of&nbsp;the&nbsp;License,&nbsp;or
+&nbsp;*&nbsp;(at&nbsp;your&nbsp;option)&nbsp;any&nbsp;later&nbsp;version.
+&nbsp;*
+&nbsp;*&nbsp;This&nbsp;program&nbsp;is&nbsp;distributed&nbsp;in&nbsp;the&nbsp;hope&nbsp;that&nbsp;it&nbsp;will&nbsp;be&nbsp;useful,
+&nbsp;*&nbsp;but&nbsp;WITHOUT&nbsp;ANY&nbsp;WARRANTY;&nbsp;without&nbsp;even&nbsp;the&nbsp;implied&nbsp;warranty&nbsp;of
+&nbsp;*&nbsp;MERCHANTABILITY&nbsp;or&nbsp;FITNESS&nbsp;FOR&nbsp;A&nbsp;PARTICULAR&nbsp;PURPOSE.&nbsp;&nbsp;See&nbsp;the
+&nbsp;*&nbsp;GNU&nbsp;General&nbsp;Public&nbsp;License&nbsp;for&nbsp;more&nbsp;details.
+&nbsp;*
+&nbsp;*&nbsp;You&nbsp;should&nbsp;have&nbsp;received&nbsp;a&nbsp;copy&nbsp;of&nbsp;the&nbsp;GNU&nbsp;General&nbsp;Public&nbsp;License
+&nbsp;*&nbsp;along&nbsp;with&nbsp;this&nbsp;program;&nbsp;if&nbsp;not,&nbsp;write&nbsp;to&nbsp;the&nbsp;Free&nbsp;Software
+&nbsp;*&nbsp;Foundation,&nbsp;Inc.,&nbsp;59&nbsp;Temple&nbsp;Place,&nbsp;Suite&nbsp;330,&nbsp;Boston,&nbsp;MA&nbsp;&nbsp;02111-1307&nbsp;&nbsp;USA
+&nbsp;*
+&nbsp;*&nbsp;Credits:&nbsp;color&nbsp;palette,&nbsp;geometry&nbsp;and&nbsp;brick&nbsp;shapes&nbsp;are&nbsp;modelled&nbsp;after
+&nbsp;*&nbsp;FUXOFT's&nbsp;Tetris2&nbsp;(architecture:&nbsp;ZX/Spectrum).
+&nbsp;*/</FONT>
+
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.applet.Applet;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.Color;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.Canvas;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.Dimension;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.Frame;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.FlowLayout;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.BorderLayout;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.KeyListener;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.KeyEvent;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.FocusListener;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.FocusEvent;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.MouseListener;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.MouseEvent;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.WindowListener;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.event.WindowEvent;
+<FONT COLOR="#0000ff"><B>import</B></FONT>&nbsp;java.awt.Graphics;
+
+<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>class</B></FONT>&nbsp;<A NAME=".">PTetriS</A>&nbsp;<FONT COLOR="#0000ff"><B>extends</B></FONT>&nbsp;<FONT COLOR="#00007f">Applet</FONT>&nbsp;<FONT COLOR="#0000ff"><B>implements</B></FONT>&nbsp;<FONT COLOR="#00007f">Runnable</FONT>,&nbsp;<FONT COLOR="#00007f">KeyListener</FONT>,&nbsp;<FONT COLOR="#00007f">FocusListener</FONT>,&nbsp;<FONT COLOR="#00007f">MouseListener</FONT>,&nbsp;<FONT COLOR="#00007f">WindowListener</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;these&nbsp;are&nbsp;the&nbsp;1st&nbsp;column&nbsp;in&nbsp;VIM's&nbsp;syntax.txt</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;color&nbsp;values&nbsp;are&nbsp;stolen&nbsp;from&nbsp;TETRIS2&nbsp;for&nbsp;ZX/Spectrum</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT>&nbsp;black=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkblue=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbf<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;??</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkgreen=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbf00<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;??</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkcyan=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbfbf<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkred=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbf0000<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkmagenta=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbf00bf<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;brown=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbfbf00<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;rather&nbsp;darkyellow</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lightgray=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xbfbfbf<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;darkgray=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0x5f5f5f<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;??</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;blue=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xff<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;??</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;green=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xff00<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cyan=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xffff<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;red=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xff0000<FONT COLOR="#ff0000">)</FONT>,&nbsp;<FONT COLOR="#007f00">//&nbsp;??</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;magenta=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xff00ff<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;yellow=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xffff00<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;white=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">(</FONT>0xffffff<FONT COLOR="#ff0000">)</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BG=black,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BORDER=darkmagenta,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MSG=white,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[]</FONT>=<FONT COLOR="#ff0000">{</FONT>darkcyan,darkgreen,lightgray,cyan,yellow,green,brown<FONT COLOR="#ff0000">}</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;sorry,&nbsp;no&nbsp;java&nbsp;classes&nbsp;for&nbsp;the&nbsp;shapes&nbsp;:-(</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#00007f">String</FONT>&nbsp;<FONT COLOR="#7f0000">S</FONT><FONT COLOR="#ff0000">[][]</FONT>=<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;......#.......#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;####..#.####..#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;......#.......#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;......#.......#.&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.##..##..##..##.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.##..##..##..##.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;................&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;..##.#....##.#..&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.##..##..##..##.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;......#.......#.&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.##...#..##...#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;..##.##...##.##.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.....#.......#..&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;..#...#.......#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.###.##..###..##&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;......#...#...#.&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.#....#.......##&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.###..#..###..#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.....##....#..#.&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+
+&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#007f7f">&quot;................&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;...#.##.......#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;.###..#..###..#.&quot;</FONT>,
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;......#..#....##&quot;</FONT><FONT COLOR="#ff0000">}</FONT>,
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#00007f">String</FONT>&nbsp;titlee=<FONT COLOR="#007f7f">&quot;PTetriS&nbsp;v0.3&nbsp;(C)&nbsp;pts@fazekas.hu,&nbsp;GNU&nbsp;GPL&quot;</FONT>;
+
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;I'm&nbsp;not&nbsp;sure&nbsp;whether&nbsp;we&nbsp;require&nbsp;these,&nbsp;so&nbsp;I've&nbsp;included&nbsp;them.&nbsp;Maybe</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;we&nbsp;won't&nbsp;be&nbsp;able&nbsp;to&nbsp;get&nbsp;focus&nbsp;if&nbsp;we&nbsp;don't&nbsp;have&nbsp;these.</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;focusGained<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">FocusEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;focusLost<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">FocusEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowActivated<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#007f00">/*requestFocus();*/</FONT>&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#007f00">/*useless*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowDeactivated<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#007f00">//&nbsp;stop();&nbsp;comment&nbsp;OK</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowClosed<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowClosing<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">((</FONT><FONT COLOR="#00007f">Frame</FONT><FONT COLOR="#ff0000">)</FONT>e.getComponent<FONT COLOR="#ff0000">())</FONT>.setVisible<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>false</B></FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;destroy<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowOpened<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowIconified<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;stop<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;windowDeiconified<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">WindowEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;start<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#007f00">//&nbsp;BRR,&nbsp;Linux</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;these&nbsp;MouseEvent&nbsp;handlers&nbsp;are&nbsp;_required_&nbsp;for&nbsp;JDK1.1+appletviewer,</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;because&nbsp;we&nbsp;can&nbsp;get&nbsp;KeyEvents&nbsp;only&nbsp;if&nbsp;we've&nbsp;already&nbsp;got&nbsp;the&nbsp;keyboard</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;focus,&nbsp;and&nbsp;we&nbsp;don't&nbsp;have&nbsp;focus&nbsp;by&nbsp;default&nbsp;:-((&nbsp;</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;mouseClicked<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">MouseEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;th_playing=!th_playing;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;System.out.println(&quot;Klikk.&quot;);</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>try</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>synchronized</B></FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;notify<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>catch</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Exception</FONT>&nbsp;ee<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;mouseReleased<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">MouseEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;mousePressed<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">MouseEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;mouseEntered<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">MouseEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;mouseExited<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">MouseEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;no&nbsp;need&nbsp;for&nbsp;an&nbsp;extra&nbsp;Canvas,&nbsp;we'll&nbsp;use&nbsp;our&nbsp;Applet.</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;static&nbsp;class&nbsp;Palya&nbsp;extends&nbsp;Canvas&nbsp;{</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;WDB=14,&nbsp;HTB=24,&nbsp;<FONT COLOR="#007f00">//&nbsp;pályaméret,&nbsp;2&nbsp;vastag&nbsp;kerettel</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BS=20,&nbsp;<FONT COLOR="#007f00">//&nbsp;block&nbsp;size,&nbsp;in&nbsp;pixels</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;WD=WDB*BS,&nbsp;HT=HTB*BS;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT>&nbsp;d=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT><FONT COLOR="#ff0000">(</FONT>WD,HT<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;setSize<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;w,&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;h<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>super</B></FONT>.setSize<FONT COLOR="#ff0000">(</FONT>WD,HT<FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;setSize<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Dimension</FONT>&nbsp;d<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>super</B></FONT>.setSize<FONT COLOR="#ff0000">(</FONT>WD,HT<FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT>&nbsp;getPreferredSize<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>&nbsp;d;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT>&nbsp;getMinimumSize<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>&nbsp;d;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT>&nbsp;getMaximumSize<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>&nbsp;d;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;for&nbsp;Java&nbsp;version&nbsp;1.1.7&nbsp;compatibility</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;VK_KP_UP=0xE0,&nbsp;VK_KP_DOWN=0xE1,&nbsp;VK_KP_LEFT=0xE2,&nbsp;VK_KP_RIGHT=0xE3;
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>long</B></FONT>&nbsp;releaseWhen=0<FONT COLOR="#7f0000">L</FONT>;
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;keyPressed<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">KeyEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//System.out.println(e.getKeyCode());</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//System.out.println(e.getKeyChar());</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!th_playing<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>char</B></FONT>&nbsp;c=<FONT COLOR="#00007f">Character</FONT>.toUpperCase<FONT COLOR="#ff0000">(</FONT>e.getKeyChar<FONT COLOR="#ff0000">())</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;kc=e.getKeyCode<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>kc==VK_KP_UP&nbsp;||&nbsp;kc==e.VK_UP<FONT COLOR="#ff0000">)</FONT>&nbsp;c=<FONT COLOR="#007f7f">'R'</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>kc==VK_KP_DOWN&nbsp;||&nbsp;kc==e.VK_DOWN&nbsp;<FONT COLOR="#ff0000">)</FONT>&nbsp;c=<FONT COLOR="#007f7f">'F'</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>kc==VK_KP_LEFT&nbsp;||&nbsp;kc==e.VK_LEFT&nbsp;<FONT COLOR="#ff0000">)</FONT>&nbsp;c=<FONT COLOR="#007f7f">'D'</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>kc==VK_KP_RIGHT||&nbsp;kc==e.VK_RIGHT<FONT COLOR="#ff0000">)</FONT>&nbsp;c=<FONT COLOR="#007f7f">'G'</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'F'</FONT>&nbsp;&amp;&amp;&nbsp;no_fast_downfall&nbsp;&amp;&amp;&nbsp;releaseWhen==e.getWhen<FONT COLOR="#ff0000">())</FONT>&nbsp;c=<FONT COLOR="#007f7f">'X'</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'R'</FONT>&nbsp;||&nbsp;c==<FONT COLOR="#007f7f">'D'</FONT>&nbsp;||&nbsp;c==<FONT COLOR="#007f7f">'F'</FONT>&nbsp;||&nbsp;c==<FONT COLOR="#007f7f">'G'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;no_fast_downfall=<FONT COLOR="#0000ff"><B>false</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>synchronized</B></FONT><FONT COLOR="#ff0000">(</FONT>t<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;sbx=bx,&nbsp;sba=ba,&nbsp;sby=by;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT>BG<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'R'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;ba=<FONT COLOR="#ff0000">(</FONT>ba+1<FONT COLOR="#ff0000">)</FONT>%4;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'D'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;bx--;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'F'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;by++;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>c==<FONT COLOR="#007f7f">'G'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;bx++;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!isBrickOK<FONT COLOR="#ff0000">())</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;bx=sbx;&nbsp;ba=sba;&nbsp;by=sby;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;repaint<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;keyReleased<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">KeyEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;no_fast_downfall=false;</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;System.out.println();</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;releaseWhen=e.getWhen<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;keyTyped<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">KeyEvent</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;
+&nbsp;&nbsp;<FONT COLOR="#00007f">Color</FONT>&nbsp;t<FONT COLOR="#ff0000">[][]</FONT>;&nbsp;<FONT COLOR="#007f00">//&nbsp;t[y][x]</FONT>
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;x,y&nbsp;block&nbsp;offset&nbsp;of&nbsp;current&nbsp;brick&nbsp;from&nbsp;the&nbsp;top-left
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;bx,&nbsp;by;
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;type&nbsp;of&nbsp;current&nbsp;brick:&nbsp;0..6
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;bt;
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;angle&nbsp;of&nbsp;current&nbsp;brick:&nbsp;0..3
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;ba;
+&nbsp;&nbsp;<FONT COLOR="#00007f">Thread</FONT>&nbsp;th;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;th_to_stop;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;th_playing;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;no_fast_downfall=<FONT COLOR="#0000ff"><B>false</B></FONT>;
+
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;Queries&nbsp;current&nbsp;glyph&nbsp;validity.
+&nbsp;&nbsp;&nbsp;*&nbsp;@return&nbsp;true&nbsp;iff&nbsp;current&nbsp;glyph&nbsp;is&nbsp;valid,&nbsp;i.e&nbsp;no&nbsp;collissions
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;isBrickOK<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">String</FONT>&nbsp;s<FONT COLOR="#ff0000">[]</FONT>=<FONT COLOR="#7f0000">S</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;x,&nbsp;y;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>y=0;y&lt;4;y++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=0;x&lt;4;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>s<FONT COLOR="#ff0000">[</FONT>y<FONT COLOR="#ff0000">]</FONT>.charAt<FONT COLOR="#ff0000">(</FONT>x+ba*4<FONT COLOR="#ff0000">)</FONT>!=<FONT COLOR="#007f7f">'.'</FONT>&nbsp;&amp;&amp;&nbsp;t<FONT COLOR="#ff0000">[</FONT>y+by<FONT COLOR="#ff0000">][</FONT>x+bx<FONT COLOR="#ff0000">]</FONT>!=BG<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>false</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>return</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;Puts&nbsp;the&nbsp;current&nbsp;brick&nbsp;into&nbsp;&lt;code&gt;this.t&lt;/code&gt;.
+&nbsp;&nbsp;&nbsp;*&nbsp;@param&nbsp;c&nbsp;uses&nbsp;the&nbsp;specified&nbsp;color.
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Color</FONT>&nbsp;c<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">String</FONT>&nbsp;s<FONT COLOR="#ff0000">[]</FONT>=<FONT COLOR="#7f0000">S</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;x,&nbsp;y;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>y=0;y&lt;4;y++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=0;x&lt;4;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>s<FONT COLOR="#ff0000">[</FONT>y<FONT COLOR="#ff0000">]</FONT>.charAt<FONT COLOR="#ff0000">(</FONT>x+ba*4<FONT COLOR="#ff0000">)</FONT>!=<FONT COLOR="#007f7f">'.'</FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;t<FONT COLOR="#ff0000">[</FONT>y+by<FONT COLOR="#ff0000">][</FONT>x+bx<FONT COLOR="#ff0000">]</FONT>=c;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;newBrick<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;bt=<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>int</B></FONT><FONT COLOR="#ff0000">)(</FONT><FONT COLOR="#00007f">Math</FONT>.random<FONT COLOR="#ff0000">()</FONT>*7<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;by=-1+2;&nbsp;bx=3+2;&nbsp;ba=0;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;newGame<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;x,&nbsp;y;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">Color</FONT>&nbsp;u<FONT COLOR="#ff0000">[]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;t=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">[</FONT>HTB+2<FONT COLOR="#ff0000">][]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>y=0;y&lt;HTB;y++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;t<FONT COLOR="#ff0000">[</FONT>y<FONT COLOR="#ff0000">]</FONT>=u=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Color</FONT><FONT COLOR="#ff0000">[</FONT>WDB+2<FONT COLOR="#ff0000">]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;u<FONT COLOR="#ff0000">[</FONT>0<FONT COLOR="#ff0000">]</FONT>=u<FONT COLOR="#ff0000">[</FONT>1<FONT COLOR="#ff0000">]</FONT>=u<FONT COLOR="#ff0000">[</FONT>WDB-2<FONT COLOR="#ff0000">]</FONT>=u<FONT COLOR="#ff0000">[</FONT>WDB-1<FONT COLOR="#ff0000">]</FONT>=BORDER;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=2;x&lt;WDB-2;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;u<FONT COLOR="#ff0000">[</FONT>x<FONT COLOR="#ff0000">]</FONT>=BG;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=2;x&lt;WDB-2;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;t<FONT COLOR="#ff0000">[</FONT>0<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=t<FONT COLOR="#ff0000">[</FONT>1<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=t<FONT COLOR="#ff0000">[</FONT>HTB-2<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=t<FONT COLOR="#ff0000">[</FONT>HTB-1<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=BORDER;
+&nbsp;&nbsp;&nbsp;&nbsp;newBrick<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;removeFullLines<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;x,&nbsp;yup=HTB-3,&nbsp;ydown=HTB-3;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;hole;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>while</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>true</B></FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>hole=<FONT COLOR="#0000ff"><B>false</B></FONT>;!hole&nbsp;&amp;&amp;&nbsp;yup&gt;=2;yup--<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=2;x&lt;WDB-2;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>t<FONT COLOR="#ff0000">[</FONT>yup<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>==BG<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;hole=<FONT COLOR="#0000ff"><B>true</B></FONT>;&nbsp;<FONT COLOR="#0000ff"><B>break</B></FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!hole<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>break</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=2;x&lt;WDB-2;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;t<FONT COLOR="#ff0000">[</FONT>ydown<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=t<FONT COLOR="#ff0000">[</FONT>yup+1<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ydown--;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>;ydown&gt;=2;ydown--<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=2;x&lt;WDB-2;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;t<FONT COLOR="#ff0000">[</FONT>ydown<FONT COLOR="#ff0000">][</FONT>x<FONT COLOR="#ff0000">]</FONT>=BG;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;This&nbsp;is&nbsp;ugly,&nbsp;slow,&nbsp;and&nbsp;not&nbsp;double-buffered.&nbsp;Those&nbsp;goals&nbsp;are&nbsp;beyond&nbsp;the
+&nbsp;&nbsp;&nbsp;*&nbsp;scope&nbsp;of&nbsp;this&nbsp;code.&nbsp;(Maybe&nbsp;beyond&nbsp;the&nbsp;scope&nbsp;of&nbsp;efficient&nbsp;Java??)
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;paint<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Graphics</FONT>&nbsp;g<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>int</B></FONT>&nbsp;x,&nbsp;y;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">Color</FONT>&nbsp;u<FONT COLOR="#ff0000">[]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>y=0;y&lt;HTB;y++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;u=t<FONT COLOR="#ff0000">[</FONT>y<FONT COLOR="#ff0000">]</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>for</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>x=0;x&lt;WDB;x++<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;g.setColor<FONT COLOR="#ff0000">(</FONT>u<FONT COLOR="#ff0000">[</FONT>x<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;g.fillRect<FONT COLOR="#ff0000">(</FONT>x*BS,y*BS,BS,BS<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;update<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Graphics</FONT>&nbsp;g<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;paint<FONT COLOR="#ff0000">(</FONT>g<FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+
+&nbsp;&nbsp;<FONT COLOR="#007f00">//Palya&nbsp;p;</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;init<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//System.out.println(&quot;Hi!&quot;);</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;setSize<FONT COLOR="#ff0000">(</FONT>WD,HT<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;setBackground<FONT COLOR="#ff0000">(</FONT>green<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;setResizable(false);&nbsp;//&nbsp;undefined&nbsp;method</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//setLayout(new&nbsp;FlowLayout(FlowLayout.CENTER,&nbsp;0,&nbsp;0));</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;setLayout<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">BorderLayout</FONT><FONT COLOR="#ff0000">(</FONT>0,0<FONT COLOR="#ff0000">))</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#007f00">/*useless*/</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;addKeyListener<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;addFocusListener<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;addMouseListener<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#007f00">/*useless*/</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//add(p=new&nbsp;Palya());</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;th=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Thread</FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#007f00">//&nbsp;timer+game&nbsp;logic&nbsp;thread</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;th.setDaemon<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>true</B></FONT><FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#007f00">//&nbsp;so&nbsp;it&nbsp;won't&nbsp;prevent&nbsp;the&nbsp;process&nbsp;from&nbsp;exiting</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;newGame<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;th.start<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;n1ss;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;start<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;requestFocus<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#007f00">/*useless*/</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>n1ss<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;th_playing=<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>try</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>synchronized</B></FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;notify<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>catch</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Exception</FONT>&nbsp;ee<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;n1ss=<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;stop<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;th_playing=<FONT COLOR="#0000ff"><B>false</B></FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;running_as_application;
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;destroy<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>try</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;th_to_stop=<FONT COLOR="#0000ff"><B>true</B></FONT>;&nbsp;th.interrupt<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>catch</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">Exception</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>running_as_application<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#00007f">System</FONT>.out.println<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#007f7f">&quot;Bye!&quot;</FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>running_as_application<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#00007f">System</FONT>.exit<FONT COLOR="#ff0000">(</FONT>0<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;This&nbsp;gets&nbsp;run&nbsp;in&nbsp;Thread&nbsp;&lt;code&gt;this.th&lt;/code&gt;.
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;run<FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>boolean</B></FONT>&nbsp;have_game=<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>while</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!th_to_stop<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>try</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>synchronized</B></FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>this</B></FONT><FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!th_playing<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;wait<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#007f00">//&nbsp;the&nbsp;monitor&nbsp;is&nbsp;the&nbsp;Applet&nbsp;object&nbsp;itself.</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;System.out.println(&quot;Woken&nbsp;up.&quot;);&nbsp;//&nbsp;DEBUG</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>continue</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>catch</B></FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">InterruptedException</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#0000ff"><B>continue</B></FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;System.out.println(&quot;Time&nbsp;is&nbsp;going&quot;);&nbsp;//&nbsp;DEBUG</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>synchronized</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>t<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>!have_game<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newGame<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;have_game=<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT>BG<FONT COLOR="#ff0000">)</FONT>;&nbsp;by++;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>isBrickOK<FONT COLOR="#ff0000">())</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;brick&nbsp;reached&nbsp;its&nbsp;final&nbsp;position</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;no_fast_downfall=<FONT COLOR="#0000ff"><B>true</B></FONT>;&nbsp;<FONT COLOR="#007f00">//&nbsp;next&nbsp;brick&nbsp;will&nbsp;begin&nbsp;falling&nbsp;slowly</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;by--;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;removeFullLines<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newBrick<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>isBrickOK<FONT COLOR="#ff0000">())</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;putBrick<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#7f0000">C</FONT><FONT COLOR="#ff0000">[</FONT>bt<FONT COLOR="#ff0000">])</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>else</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>if</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT>running_as_application<FONT COLOR="#ff0000">)</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">System</FONT>.out.println<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#007f7f">&quot;Game&nbsp;Over.&nbsp;Click&nbsp;on&nbsp;the&nbsp;window&nbsp;for&nbsp;a&nbsp;new&nbsp;game.&quot;</FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;have_game=<FONT COLOR="#0000ff"><B>false</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;th_playing=<FONT COLOR="#0000ff"><B>false</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;repaint<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>try</B></FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>&nbsp;<FONT COLOR="#00007f">Thread</FONT>.sleep<FONT COLOR="#ff0000">(</FONT>300<FONT COLOR="#ff0000">)</FONT>;&nbsp;<FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#0000ff"><B>catch</B></FONT>&nbsp;<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">InterruptedException</FONT>&nbsp;e<FONT COLOR="#ff0000">)</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT><FONT COLOR="#ff0000">}</FONT>&nbsp;<FONT COLOR="#007f00">//millis</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;Only&nbsp;for&nbsp;the&nbsp;Application&nbsp;version.
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>class</B></FONT>&nbsp;<A NAME=".PtsFrame">PtsFrame</A>&nbsp;<FONT COLOR="#0000ff"><B>extends</B></FONT>&nbsp;<FONT COLOR="#00007f">Frame</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>final</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT>&nbsp;d=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">Dimension</FONT><FONT COLOR="#ff0000">(</FONT>WD,HT<FONT COLOR="#ff0000">)</FONT>;
+
+<FONT COLOR="#007f00">//&nbsp;BUG01&nbsp;fixed&nbsp;at&nbsp;Fri&nbsp;Dec&nbsp;28&nbsp;15:01:03&nbsp;CET&nbsp;2001</FONT>
+<FONT COLOR="#007f00">//&nbsp;Advice:&nbsp;never&nbsp;ever&nbsp;override&nbsp;these&nbsp;methods&nbsp;of&nbsp;Frame/Window:</FONT>
+<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;void&nbsp;setSize(int&nbsp;w,&nbsp;int&nbsp;h)&nbsp;{}</FONT>
+<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;void&nbsp;setSize(Dimension&nbsp;d)&nbsp;{}</FONT>
+<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;Dimension&nbsp;getPreferredSize()&nbsp;{&nbsp;return&nbsp;d;&nbsp;}</FONT>
+<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;Dimension&nbsp;getMinimumSize()&nbsp;{&nbsp;return&nbsp;d;&nbsp;}</FONT>
+<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;Dimension&nbsp;getMaximumSize()&nbsp;{&nbsp;return&nbsp;d;&nbsp;}</FONT>
+
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<A HREF="#.PtsFrame"><FONT COLOR="#00007f"><U>PtsFrame</U></FONT></A><FONT COLOR="#ff0000">()</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setBackground<FONT COLOR="#ff0000">(</FONT>magenta<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setTitle<FONT COLOR="#ff0000">(</FONT>titlee<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//super.setSize(d);</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;^^^&nbsp;BUG01&nbsp;fixed.&nbsp;Advice:&nbsp;never-ever&nbsp;call&nbsp;Frame/Window#setSize</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setResizable<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>false</B></FONT><FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+
+&nbsp;&nbsp;<FONT COLOR="#3f5f00">/**
+&nbsp;&nbsp;&nbsp;*&nbsp;Only&nbsp;for&nbsp;the&nbsp;Application&nbsp;version.
+&nbsp;&nbsp;&nbsp;*/</FONT>
+&nbsp;&nbsp;<FONT COLOR="#0000ff"><B>public</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>static</B></FONT>&nbsp;<FONT COLOR="#0000ff"><B>void</B></FONT>&nbsp;main<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">String</FONT>&nbsp;argv<FONT COLOR="#ff0000">[])</FONT>&nbsp;<FONT COLOR="#ff0000">{</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">System</FONT>.out.println<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#007f7f">&quot;This&nbsp;is&nbsp;&quot;</FONT>+titlee<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#00007f">System</FONT>.out.println<FONT COLOR="#ff0000">(</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;http://borsodi.iit.bme.hu/entitanok/ptetris/\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;THIS&nbsp;SOFTWARE&nbsp;COMES&nbsp;WITH&nbsp;ABSOLUTELY&nbsp;NO&nbsp;WARRANTY!&nbsp;USE&nbsp;AT&nbsp;YOUR&nbsp;OWN&nbsp;RISK!\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;This&nbsp;program&nbsp;is&nbsp;free&nbsp;software,&nbsp;covered&nbsp;by&nbsp;the&nbsp;GNU&nbsp;GPL.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;Please&nbsp;resize&nbsp;window&nbsp;if&nbsp;it's&nbsp;too&nbsp;small!\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;Click&nbsp;on&nbsp;the&nbsp;window&nbsp;to&nbsp;start&nbsp;a&nbsp;new&nbsp;game.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;Click&nbsp;on&nbsp;the&nbsp;window&nbsp;to&nbsp;pause/continue&nbsp;current&nbsp;game.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;Close&nbsp;the&nbsp;window&nbsp;to&nbsp;exit&nbsp;from&nbsp;the&nbsp;program.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;Use&nbsp;the&nbsp;keys&nbsp;D,&nbsp;F,&nbsp;G,&nbsp;R&nbsp;or&nbsp;the&nbsp;arrow&nbsp;keys&nbsp;to&nbsp;control&nbsp;the&nbsp;falling&nbsp;brick.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;The&nbsp;goal&nbsp;of&nbsp;the&nbsp;game&nbsp;is&nbsp;survival.\n&quot;</FONT>+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f7f">&quot;If&nbsp;you&nbsp;create&nbsp;a&nbsp;row&nbsp;without&nbsp;holes,&nbsp;it&nbsp;disappears&nbsp;immediately.\n&quot;</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<A HREF="#.PtsFrame"><FONT COLOR="#00007f"><U>PtsFrame</U></FONT></A>&nbsp;f=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<A HREF="#.PtsFrame"><FONT COLOR="#00007f"><U>PtsFrame</U></FONT></A><FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<A HREF="#."><FONT COLOR="#00007f"><U>PTetriS</U></FONT></A>&nbsp;p=<FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<A HREF="#."><FONT COLOR="#00007f"><U>PTetriS</U></FONT></A><FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;p.running_as_application=<FONT COLOR="#0000ff"><B>true</B></FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;vvv&nbsp;only&nbsp;FlowLayout&nbsp;can&nbsp;guarantee&nbsp;that&nbsp;PTetriS&nbsp;won't&nbsp;get&nbsp;resized</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//f.setLayout(new&nbsp;BorderLayout(0,0));&nbsp;//&nbsp;bad!!</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;f.addWindowListener<FONT COLOR="#ff0000">(</FONT>p<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;f.add<FONT COLOR="#ff0000">(</FONT>p<FONT COLOR="#ff0000">)</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;f.doLayout<FONT COLOR="#ff0000">()</FONT>;&nbsp;<FONT COLOR="#007f00">/*useless*/</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;p.init<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;f.pack<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;^^^&nbsp;helps&nbsp;(solves)&nbsp;the&nbsp;Linux/X11/JDK1.1&nbsp;problem&nbsp;(BUG01)</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Advice:&nbsp;just&nbsp;put&nbsp;a&nbsp;Component&nbsp;with&nbsp;the&nbsp;proper&nbsp;size&nbsp;inside</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Window/Frame,&nbsp;and&nbsp;then&nbsp;call&nbsp;Frame#pack().&nbsp;Never&nbsp;ever&nbsp;call</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frame#setSize()&nbsp;or&nbsp;Frame#size(),&nbsp;never&nbsp;ever&nbsp;override</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frame#get(preferred|minimum|maximum)Size.&nbsp;You&nbsp;may&nbsp;call</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;<FONT COLOR="#007f00">//&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Frame#setLayout&nbsp;and&nbsp;Frame#show&nbsp;after&nbsp;this.</FONT>
+&nbsp;&nbsp;&nbsp;&nbsp;f.setLayout<FONT COLOR="#ff0000">(</FONT><FONT COLOR="#0000ff"><B>new</B></FONT>&nbsp;<FONT COLOR="#00007f">FlowLayout</FONT><FONT COLOR="#ff0000">(</FONT><FONT COLOR="#00007f">FlowLayout</FONT>.CENTER,&nbsp;0,&nbsp;0<FONT COLOR="#ff0000">))</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;f.show<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;&nbsp;&nbsp;p.start<FONT COLOR="#ff0000">()</FONT>;
+&nbsp;&nbsp;<FONT COLOR="#ff0000">}</FONT>
+<FONT COLOR="#ff0000">}</FONT>
+
+<FONT COLOR="#007f00">/*&nbsp;Revision&nbsp;history&nbsp;(CHANGES,&nbsp;ChangeLog):
+&nbsp;*
+&nbsp;*&nbsp;v0.1&nbsp;Tue&nbsp;Oct&nbsp;&nbsp;2&nbsp;19:58:32&nbsp;CEST&nbsp;2001&nbsp;--&nbsp;Tue&nbsp;Oct&nbsp;&nbsp;2&nbsp;23:30:29&nbsp;CEST&nbsp;2001
+&nbsp;*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3.5&nbsp;hours&nbsp;of&nbsp;work)&nbsp;playable&nbsp;version,&nbsp;HTML,&nbsp;applet,&nbsp;application
+&nbsp;*&nbsp;v0.2&nbsp;Tue&nbsp;Oct&nbsp;&nbsp;2&nbsp;23:37:58&nbsp;CEST&nbsp;2001
+&nbsp;*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Dedicated&nbsp;to&nbsp;Rév&nbsp;Szilvia,&nbsp;added&nbsp;more&nbsp;docs,&nbsp;added&nbsp;licensing,&nbsp;added
+&nbsp;*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;help&nbsp;at&nbsp;application&nbsp;startup.&nbsp;Source&nbsp;converted&nbsp;to&nbsp;HTML&nbsp;etc.
+&nbsp;*&nbsp;v0.3&nbsp;Fri&nbsp;Dec&nbsp;28&nbsp;15:07:02&nbsp;CET&nbsp;2001
+&nbsp;*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BUG01&nbsp;solved&nbsp;at&nbsp;last.&nbsp;Slower&nbsp;falls.&nbsp;Faster&nbsp;downfall&nbsp;cancelled&nbsp;for
+&nbsp;*&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the&nbsp;next&nbsp;brick.
+&nbsp;*/</FONT>
+</PRE>

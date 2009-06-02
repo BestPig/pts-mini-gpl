@@ -75,8 +75,8 @@ def _UnwrapFunction(fwrap):
 
 
 def _GetCurrentClassInfo(f, error_prefix=''):
-  """Return (metaclass, basis) pair for a class being defined in frame f."""
-  # !! cache
+  """Return (metaclass, bases) pair for a class being defined in frame f."""
+  # !! cache the result, reuse for subsequent methods.
   file_name = f.f_back.f_code.co_filename
   line_number = f.f_back.f_lineno
   linecache.checkcache(file_name)

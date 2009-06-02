@@ -9,7 +9,7 @@
 
 # vvv Dat: override with `make KERNEL_VERSION=...'
 KERNEL_VERSION = $(shell uname -r)
-RFSDELTA_VERSION = 0.06
+RFSDELTA_VERSION = 0.08
 PRODUCT = rfsdelta-$(VERSION)
 
 .PHONY: all clean install modules_install

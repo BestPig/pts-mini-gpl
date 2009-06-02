@@ -1,14 +1,18 @@
 /* 
  * rfsdelta.c
- * kernel module for 2.6.x kernels (tested with 2.6.18.1)
+ * kernel module for 2.6.x kernels (tested with 2.6.18.1 and 2.6.22.1)
  * modified by pts@fazekas.hu at Thu Jan 11 15:11:40 CET 2007
  *
  * based on rlocate.c (in rlocate-0.5.5)
- * Copyright (C) 2004 Rasto Levrinc.
+ * Copyright (C) 2004 Rasto Levrinc
  *
- * Parts of the LSM implementation were taken from
+ * Parts of the LSM (Linux kernel module) implementation were taken from
  * (http://www.logic.at/staff/robinson/)     
  * Copyright (C) 2004 by Peter Robinson
+ *
+ * Contains valuable synchronization patches by Anders Blomdell (August 2007).
+ *
+ * Contains log_write support by Andress Blomdell (August 2007).
  *   
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -108,14 +112,12 @@ struct string_list {
 
 inline static void add_string_entry(struct list_head *string_list_head, 
                                     const char *string, const char *prefix);
-inline static void remove_string_entry(struct string_list *string_entry);
+inline static void free_string_entry(struct string_list *string_entry);
 inline static void remove_string_list(const struct list_head *string_list_head);
 inline static void add_filenames_entry(char const *path, const char *prefix);
 
 static rwlock_t proc_lock = RW_LOCK_UNLOCKED;
 
-LIST_HEAD(filenames_list); 	      /* list of filenames with leading 
-				 	 'm' or 'a' */
 #if SUPPORT_EXCLUDEDIR
 static char *EXCLUDE_DIR_ARG;         /* excluded directories */
 #endif
@@ -133,11 +135,6 @@ static unsigned char UPDATEDB_ARG = 0;/* updatedb counter. If it reaches 0,
 					 full update will be performed */
 #endif
 static unsigned long NEXT_D_TIMEOUT;  /* next daemon timeout */
-
-static unsigned char RELOAD = '0';    /* Will be written as first line in the
-					 dev file. It will be set to '1' if
-					 mount or umount was called. */
-
 
 /* device file */
 static DECLARE_MUTEX(dev_mutex);
@@ -173,6 +170,9 @@ static struct file_operations device_fops = {
 };
 
 /* lsm hooks */
+static int rfsdelta_file_alloc_security(struct file * file);
+static void rfsdelta_file_free_security(struct file * file);
+static int rfsdelta_file_permission(struct file * file, int mask);
 static int rfsdelta_inode_create( struct inode *dir, struct dentry *dentry, 
                                  int mode);
 static int rfsdelta_inode_mkdir( struct inode * dir, struct dentry * dentry, 
@@ -210,12 +210,28 @@ static int rfsdelta_unregister_security(const char *name,
                                       struct security_operations *ops);
 #endif
 
-//static wait_queue_head_t filenames_wq;
+/* static wait_queue_head_t filenames_wq; */
 DECLARE_WAIT_QUEUE_HEAD(filenames_wq);
-static DEFINE_SPINLOCK(dev_lock);
-static int dev_is_open = 0;
+static struct {
+  /* Place to put all shared data that needs to be protected by a lock */
+  spinlock_t lock;
+  int is_open;
+  struct list_head filenames_list;  /* list of filenames with leading 
+				       info... */
+  struct {
+    size_t read_size;
+    /** Irrelevant if rfsdelta_dev_pending_read_size==0 */
+    char *read_buf;
+    struct string_list *read_entry;
+  } pending;
+  int reload;
+  int log_writes;
+} shared;
 
 static struct security_operations rfsdelta_security_ops = {
+  	.file_free_security =           rfsdelta_file_free_security,
+	.file_alloc_security =          rfsdelta_file_alloc_security,
+	.file_permission =              rfsdelta_file_permission,
         .inode_create =                 rfsdelta_inode_create,
         .inode_mkdir  =                 rfsdelta_inode_mkdir,
         .inode_rmdir  =                 rfsdelta_inode_rmdir,
@@ -237,8 +253,8 @@ static struct security_operations rfsdelta_security_ops = {
 
 /* proc fs */
 enum Option { NOTSET, UNKNOWN, VERSION, EXCLUDE_DIR, ACTIVATED, STARTING_PATH, 
-              OUTPUT, UPDATEDB, DEVNUMBERS };
-#define LINES_IN_PROC 7
+              OUTPUT, UPDATEDB, DEVNUMBERS, LOG_WRITES };
+#define LINES_IN_PROC 8
 
 /* proc_data is used for reading and writing to the proc fs */
 struct proc_data {
@@ -295,21 +311,22 @@ inline void add_string_entry(struct list_head *string_list_head,
                                         "memory allocation error.\n");
                         kfree(s);
 		} else {
+		  	unsigned long flags;
 		        strcpy(s->string, prefix); /**** pts ****/
 			strcpy(s->string+prefix_len, string);
+			spin_lock_irqsave(&shared.lock, flags);
                         list_add_tail(&s->list, string_list_head);
+			spin_unlock_irqrestore(&shared.lock, flags);
 		}
                 
         }
 }
 
 /*
- * remove_string_entry() removes the STRING_ENTRY from string list and 
- * frees the memory.
+ * free_string_entry() frees the memory.
  */
-inline static void remove_string_entry(struct string_list *string_entry)
+inline static void free_string_entry(struct string_list *string_entry)
 {
-        list_del(&string_entry->list);
         kfree(string_entry->string);
         kfree(string_entry);
 }
@@ -325,7 +342,8 @@ inline static void remove_string_list(const struct list_head *string_list_head)
                 entry = list_entry(string_list_head->next,
                                    struct string_list,
                                    list);
-                remove_string_entry(entry);
+		list_del(&entry->list);
+		free_string_entry(entry);
         }
 }
 
@@ -337,19 +355,18 @@ inline static void remove_string_list(const struct list_head *string_list_head)
 inline static void add_filenames_entry(char const *path, char const *prefix) 
 {
 
-        // check path against STARTING_PATH_ARG
-	// not doing in deamon for now
+        /* check path against STARTING_PATH_ARG */
 
         if (*STARTING_PATH_ARG != '\0') {
 		int starting_path_len = strlen(STARTING_PATH_ARG);
-		int path_len = strlen(path); // -1 without first character
+		int path_len = strlen(path); /* -1 without first character */
 		if (starting_path_len>path_len+1 ||
 		    strncmp(STARTING_PATH_ARG, path,
 		            (starting_path_len==path_len+1 ? /* Dat: ignore trailing `/' if long enough */
 			     			path_len:starting_path_len)))
-                        return; // this path is not in starting path
+                        return; /* this path is not in starting path */
         }
-        add_string_entry(&filenames_list, path, prefix);
+        add_string_entry(&shared.filenames_list, path, prefix);
         wake_up_interruptible( &filenames_wq );
         /* ^^^ SUXX: having two processes reading /dev/rfsdelta, Ctrl-<C> is
          *     ignored in the 2nd one -- anyway we have only 1 queue, so
@@ -367,7 +384,7 @@ static int rfsdelta_init_procfs(void)
 {
         struct proc_dir_entry *p;
 
-        p = create_proc_entry("rfsdelta", 00600, NULL);
+        p = create_proc_entry("rfsdelta", 00644, NULL);
         if (!p)
                 return -ENOMEM;
         p->owner = THIS_MODULE;
@@ -419,7 +436,7 @@ static int proc_rfsdelta_close( struct inode *inode, struct file *file)
 {
         struct proc_data *pdata = (struct proc_data*)file->private_data;
         if (pdata->option!=NOTSET) {
-                // in case there was no new line by writing
+                /* in case there was no new line by writing */
                 pdata->pbuffer[pdata->pbuffer_pos]='\n';
                 parse_proc(pdata);
         }
@@ -442,7 +459,7 @@ static ssize_t proc_rfsdelta_read( struct file *file,
         struct proc_data *pdata = (struct proc_data*)file->private_data;
         if( !pdata->pbuffer ) return -EINVAL;
         for (i = 0; i<len; i++) {
-                if (pdata->pbuffer_pos == 0) { // beginning of the line
+                if (pdata->pbuffer_pos == 0) { /* beginning of the line */
                         if (pdata->option == NOTSET) {
                                 switch(pdata->read_line)
                                 {
@@ -479,6 +496,10 @@ static ssize_t proc_rfsdelta_read( struct file *file,
                                 case 6:
                                         sprintf(pdata->pbuffer, "devnumbers: ");
                                         pdata->option = DEVNUMBERS;
+                                        break;
+                                case 7:
+                                        sprintf(pdata->pbuffer, "log_writes: ");
+                                        pdata->option = LOG_WRITES;
                                         break;
                                 default: /**** pts ****/
                                         pdata->read_line++;
@@ -546,11 +567,16 @@ static ssize_t proc_rfsdelta_read( struct file *file,
                                 sprintf(pdata->pbuffer, "c %u %u\n", using_major, 0);
                                 read_unlock(&proc_lock);
                                 break;
+                        case LOG_WRITES: /**** ab ****/
+                                read_lock(&proc_lock);
+                                sprintf(pdata->pbuffer, "%d\n", shared.log_writes);
+                                read_unlock(&proc_lock);
+                                break;
                         case NOTSET:
                         case UNKNOWN:
                                 break;
                         }
-                        i--; // remove '\0'
+                        i--; /* remove '\0' */
                 } else {
                         if (put_user( p, buffer+i ))
                                 return -EFAULT;
@@ -585,6 +611,8 @@ inline void proc_set_option(const char *option_string,
         } else if (!strcmp(option_string, "updatedb")) {
                 pdata->option   = UPDATEDB;
 #endif
+        } else if (!strcmp(option_string, "log_writes")) {
+                pdata->option   = LOG_WRITES;
         } else {
                 printk(KERN_WARNING "unknown option: %s\n", option_string);
                 pdata->option   = UNKNOWN;
@@ -598,7 +626,7 @@ static void parse_proc(struct proc_data *pdata)
 {
         char *p;
         p = pdata->pbuffer + pdata->pbuffer_pos;
-        // remove leading spaces or reduce more spaces to one.
+        /* remove leading spaces or reduce more spaces to one. */
         if ( *p == ' ' && (pdata->pbuffer_pos == 0 || *(p-1) == ' ')) {
                 pdata->pbuffer_pos--;
                 return;
@@ -607,9 +635,9 @@ static void parse_proc(struct proc_data *pdata)
         {
         case NOTSET:
                 if (*p == ':') {
-                        // option string is in pbuffer
+                        /* option string is in pbuffer */
 
-                        // remove space before ':'
+                        /* remove space before ':' */
                         if (pdata->pbuffer_pos>0 && *(p-1) == ' ')
                                 p--;
                         *p = '\0';
@@ -622,7 +650,7 @@ static void parse_proc(struct proc_data *pdata)
 #if SUPPORT_EXCLUDEDIR
         case EXCLUDE_DIR:
                 if ( *p == '\n' ) {
-                        // the argument is in pbuffer
+                        /* the argument is in pbuffer */
                         pdata->option = NOTSET;
                         *p = '\0';
                         write_lock(&proc_lock);
@@ -656,7 +684,7 @@ static void parse_proc(struct proc_data *pdata)
                                 if (ACTIVATED_ARG == '0') { /**** pts ****/
                                 	/* Imp: lock */
                                 	/* Imp: remove f_entry */
-					/* rfsdelta_dev_pending_read_size=0; */
+					/* shared.pending.read_size=0; */
                                         wake_up_interruptible( &filenames_wq );
 				}
                         }
@@ -665,9 +693,9 @@ static void parse_proc(struct proc_data *pdata)
                 break;
         case STARTING_PATH:
                 if ( *p == '\n' ) {
-                        // the argument is in pbuffer
+                        /* the argument is in pbuffer */
                         pdata->option = NOTSET;
-                        // add trailing slash, if it's not there
+                        /* add trailing slash, if it's not there */
                         if (p>pdata->pbuffer) {
                                 if (*(p-1) == '/' || 
 				    p - pdata->pbuffer >= PATH_MAX + 16 -2) { 
@@ -695,7 +723,7 @@ static void parse_proc(struct proc_data *pdata)
 #if SUPPORT_OUTPUT_ARG
         case OUTPUT:
                 if ( *p == '\n' ) {
-                        // the argument is in pbuffer
+                        /* the argument is in pbuffer */
                         pdata->option = NOTSET;
                         *p = '\0';
                         write_lock(&proc_lock);
@@ -723,6 +751,18 @@ static void parse_proc(struct proc_data *pdata)
                 }
                 break;
 #endif
+       case LOG_WRITES:
+                if ( *p == '\n' ) {
+                        pdata->option = NOTSET;
+                        *p = '\0';
+                        write_lock(&proc_lock);
+			spin_lock_irq(&shared.lock);
+                        shared.log_writes = simple_strtoul(pdata->pbuffer , NULL, 10);
+			spin_unlock_irq(&shared.lock);
+                        write_unlock(&proc_lock);
+                        pdata->pbuffer_pos = -1;
+                }
+                break;
         default:
                 if ( *p=='\n' ) {
                         pdata->option = NOTSET;
@@ -746,7 +786,7 @@ static ssize_t proc_rfsdelta_write( struct file *file,
         for (i = 0; i<len; i++) {
                 if (get_user( p, buffer + i))
                         return -EFAULT;
-                if ( pdata->pbuffer_pos < (PAGE_SIZE-2)) { // buffer overflow
+                if ( pdata->pbuffer_pos < (PAGE_SIZE-2)) { /* buffer overflow */
                         pdata->pbuffer[pdata->pbuffer_pos] = p;
                         parse_proc(pdata);
                         pdata->pbuffer_pos++;
@@ -791,7 +831,7 @@ static int rfsdelta_dev_register(void)
 	                DEVICE_NAME " %u:%u\n",
 			(major<=0 ? "registered" : "using"), using_major, 0);
 
-        // sysfs 
+        /* sysfs */
         rfsdelta_class = class_create(THIS_MODULE, "rfsdelta");
         if (IS_ERR(rfsdelta_class)) {
                 printk(KERN_ERR "Error creating rfsdelta class.\n");
@@ -801,7 +841,7 @@ static int rfsdelta_dev_register(void)
         class_device_create(rfsdelta_class, NULL, MKDEV(using_major, 0), NULL, 
                                 DEVICE_NAME);
 
-        // devfs
+        /* devfs */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
         devfs_mk_cdev(MKDEV(using_major, 0), S_IFCHR|S_IRUSR|S_IWUSR, DEVICE_NAME);
 #endif
@@ -833,10 +873,10 @@ static int rfsdelta_dev_open(struct inode *inode, struct file *file)
         int old_dev_is_open;
 
         /**** pts ****/
-        spin_lock_irq(&dev_lock);
-        old_dev_is_open=dev_is_open;
-        dev_is_open = 1;
-        spin_unlock_irq(&dev_lock);
+        spin_lock_irq(&shared.lock);
+        old_dev_is_open=shared.is_open;
+        shared.is_open = 1;
+        spin_unlock_irq(&shared.lock);
         if (old_dev_is_open) return -EBUSY;
 
         /* Dat: this would block the process (uninterruptible with Ctrl-<C>!) */
@@ -852,9 +892,9 @@ static int rfsdelta_dev_release(struct inode *inode, struct file *file)
         up(&dev_mutex);
 
         /**** pts ****/
-        spin_lock_irq(&dev_lock);
-        dev_is_open = 0;
-        spin_unlock_irq(&dev_lock);
+        spin_lock_irq(&shared.lock);
+        shared.is_open = 0;
+        spin_unlock_irq(&shared.lock);
 
         return 0;
 }
@@ -885,108 +925,105 @@ ssize_t rfsdelta_dev_write( struct file *filp, const char *buff, size_t count,
         return (ssize_t)0;
 }
 
-/**** pts ****/
-size_t rfsdelta_dev_pending_read_size=0;
-/** Irrelevant if rfsdelta_dev_pending_read_size==0 */
-char *rfsdelta_dev_pending_read_buf=NULL;
-struct string_list *rfsdelta_dev_pending_read_entry;
-
-/**** pts ****/
-/** @param src_buf should remain readable after return.
- */
-ssize_t rfsdelta_dev_read_to_user(char *user_buf, char *src_buf, ssize_t src_size, ssize_t user_buf_left) {
-        ssize_t dummy;
-        (void)dummy;
-	/* Imp: assert(rfsdelta_dev_pending_read_size==0) */
-	if (user_buf_left<src_size) {
-		/* Imp: return if copy_to_user failed */
-		dummy=copy_to_user(user_buf, src_buf, user_buf_left);
-		rfsdelta_dev_pending_read_size=src_size-user_buf_left;
-		rfsdelta_dev_pending_read_buf=src_buf+user_buf_left;
-		rfsdelta_dev_pending_read_entry=NULL;
-		return user_buf_left;
-	} else {
-		/* Imp: return if copy_to_user failed */
-		dummy=copy_to_user(user_buf, src_buf, src_size);
-		return src_size;
-	}
-}
-
 /* 
  * rfsdelta_dev_read() 
  * traverse the list of filenames and write them to the user buffer.
  * Remove every entry from the filenames list that has been written. 
  */
 static ssize_t rfsdelta_dev_read(struct file *file, 
-                           char *buffer, 
-                           size_t length, 
-                           loff_t *offset)
-        {
-	ssize_t copyc, length0=length, dummy;
-        char *string_ptr;
-        struct string_list *f_entry;
-        
-	/**** pts ****/
-        if (length<=0) return 0;
-	if (rfsdelta_dev_pending_read_size>length) {
-		/* Imp: return if copy_to_user failed */
-		dummy=copy_to_user(buffer, rfsdelta_dev_pending_read_buf, length);
-		rfsdelta_dev_pending_read_buf+=length;
-		rfsdelta_dev_pending_read_size-=length;
-		return length;
-	}
-	if (rfsdelta_dev_pending_read_size>0) {
-		/* Imp: return if copy_to_user failed */
-		dummy=copy_to_user(buffer, rfsdelta_dev_pending_read_buf, rfsdelta_dev_pending_read_size);
-		buffer+=rfsdelta_dev_pending_read_size;
-		length-=rfsdelta_dev_pending_read_size;
-		rfsdelta_dev_pending_read_buf=NULL;
-		rfsdelta_dev_pending_read_size=0;
-		if (rfsdelta_dev_pending_read_entry!=NULL) {
-			remove_string_entry(rfsdelta_dev_pending_read_entry);
-			rfsdelta_dev_pending_read_entry=NULL;
-		}
-			
-	}
-	if (length<=0) return length0-length;
+				 char *buffer, 
+				 size_t length, 
+				 loff_t *offset)
+{
+  ssize_t result = 0;
+  
+  while (length > 0) {
+    char *from_buf = NULL;
+    size_t from_size = 0;
+    unsigned long flags;
 
-        /* daemon activity, set next timeout */
-        NEXT_D_TIMEOUT = jiffies + D_TIMEOUT;
-        if (ACTIVATED_ARG == 'd') {
-                /* inserting of paths was disabled, reenable it */
-                printk(KERN_INFO "rfsdelta: inserting of paths reenabled.\n");
-                ACTIVATED_ARG = '1';
-        }
-        if ( list_empty(&filenames_list) && length==length0 ) { // put to sleep
-                if( file->f_flags & O_NONBLOCK ) 
-                        return -EWOULDBLOCK;
-                if (ACTIVATED_ARG != '0') /**** pts ****/
-                        interruptible_sleep_on( &filenames_wq );
-        }
-        while ( (!list_empty(&filenames_list)) ) {
-		if (RELOAD != '0') { /* '1', '2':umount or '3' */
-		        char s[2];
-		        s[0]=RELOAD; s[1]='\0';
-			copyc=rfsdelta_dev_read_to_user(buffer, s, 2, length);
-			length-=copyc; buffer+=copyc;
-			RELOAD = '0';
-			if (copyc<2) break; /* if (rfsdelta_dev_pending_read_size>0) */
-		}
-                f_entry = list_entry(filenames_list.next,
-                                     struct string_list,
-                                     list);
-                string_ptr = f_entry->string;
-		/**** pts ****/
-		/* vvv Dat: put '\0' at end */
-		copyc=rfsdelta_dev_read_to_user(buffer, string_ptr, strlen(string_ptr)+1, length);
-		length-=copyc; buffer+=copyc;
-		if (rfsdelta_dev_pending_read_size>0) {
-			rfsdelta_dev_pending_read_entry=f_entry;
-			break;
-		}
-                remove_string_entry(f_entry);
-        }
-        return length0-length;
+    spin_lock_irqsave(&shared.lock, flags);
+    if (shared.pending.read_size) {
+      /* Old data to take care of, don't overwrite */
+    } else if (!list_empty(&shared.filenames_list)) {
+      if (shared.pending.read_entry) {
+	free_string_entry(shared.pending.read_entry);
+	shared.pending.read_entry = NULL;
+      }
+      /* Reloads are only reported if there is anything else
+       * to report as well.
+       */
+      if (shared.reload) {
+	static char reload[2]; /* Has to be static since it will be reused 
+				* on next call if length == 1 */
+	reload[0] = '0' + shared.reload;
+	reload[1] = '\0';
+	shared.reload = 0;
+	shared.pending.read_buf = reload;
+	shared.pending.read_size = strlen(shared.pending.read_buf) + 1;
+      } else {
+	shared.pending.read_entry = list_entry(shared.filenames_list.next,
+					       struct string_list,
+					       list);
+	list_del(&shared.pending.read_entry->list);
+	shared.pending.read_buf = shared.pending.read_entry->string;
+	shared.pending.read_size = strlen(shared.pending.read_buf) + 1;
+      }
+    }
+    from_buf = shared.pending.read_buf;
+    from_size = shared.pending.read_size;
+    if (from_size > length) {
+      from_size = length;
+    }
+    shared.pending.read_size -= from_size;
+    shared.pending.read_buf += from_size;
+    /* daemon activity, set next timeout */
+    /* !! BEGIN put this in shared */
+    NEXT_D_TIMEOUT = jiffies + D_TIMEOUT;
+    if (ACTIVATED_ARG == 'd') {
+      /* inserting of paths was disabled, reenable it */
+      printk(KERN_INFO "rfsdelta: inserting of paths reenabled.\n");
+      ACTIVATED_ARG = '1';
+    }
+    /* !! END put this in shared */
+    spin_unlock_irqrestore(&shared.lock, flags);
+    
+    if (from_size == 0) {
+      if (result) {
+	/*  Return what we have got so far */
+	break;
+      } else if (file->f_flags & O_NONBLOCK) {
+	result = -EWOULDBLOCK;
+	break;
+      } else {
+	/* Put ACTIVATED in shared ?? */
+	if (ACTIVATED_ARG != '0') {
+	  int do_wait;
+	  DEFINE_WAIT(wait);
+
+	  prepare_to_wait(&filenames_wq, &wait, TASK_INTERRUPTIBLE);
+	  spin_lock_irqsave(&shared.lock, flags);
+	  do_wait = list_empty(&shared.filenames_list);
+	  spin_unlock_irqrestore(&shared.lock, flags);
+	  if (do_wait) {
+	    schedule();
+	  }
+	  finish_wait(&filenames_wq, &wait);
+	}
+	if (signal_pending(current)) {
+	  result = -ERESTARTSYS;
+	  break;
+	}
+      }
+    } else {
+      if (copy_to_user(buffer + result, from_buf, from_size)) {
+        return result==0 ? -EFAULT : result;
+      }
+      length -= from_size;
+      result += from_size;
+    }
+  }
+  return result;
 }
 
 /*
@@ -995,10 +1032,14 @@ static ssize_t rfsdelta_dev_read(struct file *file,
 static unsigned int rfsdelta_dev_poll( struct file *filp, poll_table *wait)
 {
         unsigned int mask = 0;
+  	unsigned long flags;
 
         poll_wait( filp, &filenames_wq, wait );
-        if( !list_empty(&filenames_list) )
+	
+	spin_lock_irqsave(&shared.lock, flags);
+        if( !list_empty(&shared.filenames_list) )
                 mask |= POLLIN | POLLRDNORM;
+	spin_unlock_irqrestore(&shared.lock, flags);
         return mask;
 }
 
@@ -1048,7 +1089,7 @@ Elong:
 
 /* 
  * insert_path() finds the corresponding full path for a dentry and inserts 
- * it to the filenames_list. MODE which is 'a' or 'm' will be added to the 
+ * it to the shared.filenames_list. MODE which is 'a' or 'm' will be added to the 
  * beginning of the path (or `d' if removed/unlinked, or `1' elsewhere to
  * signify mount point changes). 
  */
@@ -1058,18 +1099,18 @@ inline static void insert_path_low(struct dentry *dentry_for_name,
         char *path;
 
         if (ACTIVATED_ARG != '1' &&
-            (ACTIVATED_ARG != 'r' || !dev_is_open)) /**** pts ****/
+            (ACTIVATED_ARG != 'r' || !shared.is_open)) /**** pts ****/
            {
         
 #if SUPPORT_UPDATEDB_ARG
-                UPDATEDB_ARG = 0; // for full updatedb
+                UPDATEDB_ARG = 0; /* for full updatedb */
 #endif
-                return;  // not activated or disabled
+                return;  /* not activated or disabled */
         }
         if (time_after(jiffies, NEXT_D_TIMEOUT)) {
                 /* timeout, disable inserting of paths */
                 if (ACTIVATED_ARG != 'd') {
-                        ACTIVATED_ARG = 'd'; // disabled
+                        ACTIVATED_ARG = 'd'; /* disabled */
                         printk(KERN_INFO "rfsdelta: daemon timeout: "
                                 "inserting of paths disabled.\n");
                 }
@@ -1086,7 +1127,7 @@ inline static void insert_path_low(struct dentry *dentry_for_name,
 	        	  (unsigned long)dentry_for_stat->d_inode->i_nlink, /* st_nlink */
 	        	  (unsigned long)dentry_for_stat->d_inode->i_rdev); /* st_rdev */
 	        } else {
-	        	/* Dat: no d_inode yet for mkdir() */
+	        	/* Dat: no d_inode yet for mkdir() or file creation */
 	        	sprintf(prefix, "%c%lX,?:", mode,
 	        	  (unsigned long)dentry_for_stat->d_sb->s_dev);
 	        }
@@ -1094,6 +1135,53 @@ inline static void insert_path_low(struct dentry *dentry_for_name,
 	} else 
         	printk(KERN_WARNING "rfsdelta: path too long\n");
 
+}
+
+struct rfsdelta_file_security_struct {
+  int mask;
+};
+
+static int rfsdelta_file_alloc_security(struct file * file)
+{
+  int log_writes;
+  unsigned long flags;
+
+  spin_lock_irqsave(&shared.lock, flags);
+  /* We might get away without protecting the read, but I'm paranoid */
+  log_writes = shared.log_writes;
+  spin_unlock_irqrestore(&shared.lock, flags);
+  
+  if (log_writes) {
+    struct rfsdelta_file_security_struct *fsec;
+    
+    fsec = kzalloc(sizeof(struct rfsdelta_file_security_struct), GFP_KERNEL);
+    if (!fsec) {
+      printk("rfsdelta out of memory %s\n", __FUNCTION__);
+      return -ENOMEM;
+    }
+    file->f_security = fsec;
+  }
+  return 0;
+}
+
+static void rfsdelta_file_free_security(struct file * file)
+{
+  struct rfsdelta_file_security_struct *fsec = file->f_security;
+  if (fsec && (fsec->mask & (O_APPEND | O_RDWR | O_WRONLY)) && 
+      file->f_path.dentry) {
+    insert_path( file->f_path.dentry, 'w' );
+  }
+  file->f_security = NULL;
+  kfree(fsec);
+}
+
+static int rfsdelta_file_permission(struct file * file, int mask)
+{
+  struct rfsdelta_file_security_struct *fsec = file->f_security;
+  if (fsec) {
+    fsec->mask |= mask;
+  }
+  return 0;
 }
 
 static int rfsdelta_inode_create( struct inode *dir, struct dentry *dentry, 
@@ -1168,16 +1256,26 @@ static int rfsdelta_sb_mount( char *dev_name,
 			     unsigned long flags, 
 			     void *data)
 {
-	RELOAD |= 1;
-	/* Dat: don't notify immediately, but upon next write */
-        return 0;
+  unsigned long irq_flags;
+
+  spin_lock_irqsave(&shared.lock, irq_flags);
+  shared.reload |= 1;
+  spin_unlock_irqrestore(&shared.lock, irq_flags);
+
+  /* Dat: don't notify immediately, but upon next write */
+  return 0;
 }
 
 static int rfsdelta_sb_umount( struct vfsmount *mnt, int flags ) 
 {
-	RELOAD |= 2;
-	/* Dat: don't notify immediately, but upon next write */
-	return 0;
+  unsigned long irq_flags;
+
+  spin_lock_irqsave(&shared.lock, irq_flags);
+  shared.reload |= 2;
+  spin_unlock_irqrestore(&shared.lock, irq_flags);
+
+  /* Dat: don't notify immediately, but upon next write */
+  return 0;
 }
 
 
@@ -1219,13 +1317,19 @@ static int __init init_rfsdelta(void)
 {
         int ret;
 	printk(KERN_INFO "rfsdelta version "RFSDELTA_VERSION" loaded\n");
-        //init_waitqueue_head (&filenames_wq);
-        // register dev 
+
+        spin_lock_init(&shared.lock);
+        shared.reload = 0;
+	shared.is_open = 0;
+	INIT_LIST_HEAD(&shared.filenames_list);
+	
+        /* init_waitqueue_head (&filenames_wq); */
+        /* register dev */
         ret = rfsdelta_dev_register();
         if (ret)
                 goto out;
                                 
-        // register as security module
+        /* register as security module */
         ret = register_security( &rfsdelta_security_ops );
         if ( ret ) {
                 ret = mod_reg_security(DEVICE_NAME, &rfsdelta_security_ops);
@@ -1267,13 +1371,13 @@ static int __init init_rfsdelta(void)
 #if SUPPORT_OUTPUT_ARG
         *OUTPUT_ARG = '\0';
 #endif
-        // create proc entry
+        /* create proc entry */
         ret = rfsdelta_init_procfs();
 	if (ret) {
 		printk (KERN_ERR "rfsdelta: rfsdelta_init_procfs() failed.\n");
                 goto no_proc;
 	}
-        // set timeout for daemon inactivity
+        /* set timeout for daemon inactivity */
         NEXT_D_TIMEOUT = jiffies + D_TIMEOUT;
   	goto out;
 
@@ -1305,8 +1409,12 @@ out:
  */
 static void __exit exit_rfsdelta(void)
 {
+  	unsigned long flags;
+
         rfsdelta_exit_procfs();
-	remove_string_list(&filenames_list);
+	spin_lock_irqsave(&shared.lock, flags);
+	remove_string_list(&shared.filenames_list);
+	spin_unlock_irqrestore(&shared.lock, flags);
 #if SUPPORT_OUTPUT_ARG
         free_page( (unsigned long)OUTPUT_ARG);
 #endif
@@ -1328,6 +1436,6 @@ static void __exit exit_rfsdelta(void)
   	printk(KERN_INFO "rfsdelta: unloaded\n");
 }
 
-
+module_param_named(log_writes, shared.log_writes, int, 0);
 security_initcall( init_rfsdelta );
 module_exit( exit_rfsdelta );

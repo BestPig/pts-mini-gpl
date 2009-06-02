@@ -1,17 +1,21 @@
 README for rfsdelta
 by pts@fazekas.hu at Thu Jan 11 17:33:59 CET 2007
 
-rfsdelta is a kernel module for the Linux 2.6 series, which reports all
-filesystem modifications (recursively) in userspace. It is similar to
-inotify, dnotify (but provides recurisve notification, and only a single
-watcher process is allowed), fschange, fsevent and rlocate (but also
-reports unlink(), rmdir() and st_*). rfsdelta was based on the kernel module
-shipped with rlocate 0.5.5.
+rfsdelta is a kernel module for the Linux 2.6 series, which collects all
+filesystem inode changes (recursively), and reports them to a userspace
+process. It is similar to inotify, dnotify (but provides recurisve
+notification, and only a single watcher process is allowed), fschange,
+fsevent and rlocate (but also reports unlink(), rmdir() and st_*). rfsdelta
+was based on the kernel module shipped with rlocate 0.5.5.
 
 Limitations
 ~~~~~~~~~~~
 -- Only one watch per system: the 2nd attempt to open rfsdelta-events
    will give `Device or resource busy'.
+-- Doesn't work with rlocate.ko or any other security module (registered
+   with register_security()). A subsequent call to register_security will
+   yield `Invalid parameters'. (This shouldn't be hard to fix provided that
+   rlocate.ko is the first security module to be loaded.)
 
 How to compile and install
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -132,6 +136,9 @@ Each item in the queue is a null-terminated string. Details:
 
    "u" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <pathname> "\0"
 
+   If the last link to a file is about to be removed, <nlink> is reported to
+   be `1'.
+
 -- for the new inode of link():
 
    "l" <dev> ",?:" <devname> ":/" <pathname> "\0"
@@ -148,6 +155,9 @@ Each item in the queue is a null-terminated string. Details:
 
    "o" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <old-pathname> "\0"
    "a" <dev> "," <ino> "," <mode> "," <nlink> "," <rdev> ":" <devname> ":/" <new-pathname> "\0"
+
+All events are reported _before_ they take place. That's the reason why
+mkdir() cannot report `ino'.
 
 The following operations are not reported by rfsdelta:
 
@@ -182,29 +192,16 @@ field of `struct stat':
 -- <nlink> is st_nlink in `struct stat'
 -- <rdev> is st_rdev in `struct stat'
 
-The 
+The <devname> field is the device name in the kernel (such as `sda5' or
+`dm-1', the latter for LVM logical volumes). Usually there is a device node
+in `/dev' by that name (except for `dm-*', whose device nodes are usually in
+`/dev/mapper'). The recommended method for finding the /dev/* device and the
+device for the mount point is using <dev> instead of <devname>, and matching
+<dev> to the stat()ted st_dev values of the devices in /proc/mounts.
 
-
-   
-
-
-
-
-
-        .inode_mknod  =                 rfsdelta_inode_mknod,
-        .inode_rename =                 rfsdelta_inode_rename,
-	.sb_mount     =			rfsdelta_sb_mount,
-	.sb_umount    =			rfsdelta_sb_umount,
-
-	        	  (unsigned long)dentry_for_stat->d_inode->i_sb->s_dev, /* st_dev */
-	        	  (unsigned long)dentry_for_stat->d_inode->i_ino, /* st_ino */
-	        	  (unsigned long)dentry_for_stat->d_inode->i_mode, /* st_mode */
-	        	  (unsigned long)dentry_for_stat->d_inode->i_nlink, /* st_nlink */
-	        	  (unsigned long)dentry_for_stat->d_inode->i_rdev); /* st_rdev */
-
-
-
-!!
+<pathname> indicates both the name and the directory path of the file,
+separated by `/'. It is always preceded by `/', never starts or ends by `/',
+but it may contain `/' (but no `//').
 
 Most important incompatible differences from rlocate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -215,6 +212,7 @@ Most important incompatible differences from rlocate
 -- /dev/rfsdelta-event reports st_* numbers upon each change.
 -- Change mode characters (such as `a' or `d') are different.
 -- Source file name is reported for each rename().
+
 
 Changes over rlocate.ko by pts
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -235,8 +233,9 @@ OK: module: startingpath checks re-enabled (with trailing `/' check)
 Improvement possibilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 !! stress test (e.g. rsync, kernel compilation)
-!! module: report st_dev, st_ino, st_mode and st_rdev upon change
-!! inode_post_create() etc. call hooks _after_ the operation
+!! proper hooks for .register_security (just `return 0' is not enough, this
+   won't call the security ooks), call all unregister_security bu hand upon
+   module removal
 Dat: module: do we have to lock operations on filenames_list? I don't
      think so, drivers/acpi/event.c doesn't lock either
 Dat: mkdir(), creat() is `a', mv() is `m', unlink() is not reported,
@@ -247,11 +246,10 @@ Dat: /proc/acpi/event can be a model for making the process sleep on event
      -> rlocate_dev_read() (just uncomment filenames_wq)
      interruptible_sleep_on()
 Dat: Errno::EAGAIN==Errno::EWOULDBLOCK
-Dat: crw-rw----  1 root root 254, 0 Jan 11 14:55 /dev/rfsdelta
-SUXX: only 1 reader process at a time
+Dat: example: crw-rw----  1 root root 254, 0 Jan 11 14:55 /dev/rfsdelta
 Dat: having two processes reading /dev/rfsdelta, Ctrl-<C> is
-     ignored in the 2nd one -- anyway we have only 1 queue, so
-     we'll return EBUSY for the 2nd open().
+     ignored in the 2nd one (because of the mutex??) -- anyway we have only 1
+     queue, so we'll return EBUSY for the 2nd open().
 Dat: the default of ACTIVATED_ARG is for disabling the filling of
      filenames_list until someone is reading /dev/rfsdelta
 Imp: get rid of UPDATEDB_ARG
@@ -260,5 +258,8 @@ Imp: isn't it too early to check mount points at "1\0" for a slow mount?
 Imp: don't we have a race condition with the system performing the task and
      our security module inserting the event?
 Imp: call parse_proc() before close() to return syntax errors
+Dat: Make inode_* operations are changed to inode_post_* operations to avoid
+     race conditions (only inode_post_setxattr() in 2.6.18.1 -- earlier
+     kernels have much more inode_post_*).
 
 __END__

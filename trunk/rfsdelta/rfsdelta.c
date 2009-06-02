@@ -86,6 +86,9 @@ MODULE_LICENSE("GPL");
 #undef  SUPPORT_EXCLUDEDIR
 /** Just a setting, not used by the kernel module. */
 #define SUPPORT_EXCLUDEDIR 0
+#undef  SUPPORT_BROKEN_STACKING
+/** Doesn't work yet, `return 0' is not enough. */
+#define SUPPORT_BROKEN_STACKING 0
 
 #define DEVICE_NAME     "rfsdelta-event"
 MODULE_SUPPORTED_DEVICE(DEVICE_NAME)
@@ -199,6 +202,14 @@ static int rfsdelta_sb_umount( struct vfsmount *mnt, int flags );
 static int rfsdelta_inode_permission (struct inode *inode, int mask, 
                                      struct nameidata *nd);
 #endif
+
+#if SUPPORT_BROKEN_STACKING
+static int rfsdelta_register_security(const char *name,
+                                      struct security_operations *ops);
+static int rfsdelta_unregister_security(const char *name,
+                                      struct security_operations *ops);
+#endif
+
 //static wait_queue_head_t filenames_wq;
 DECLARE_WAIT_QUEUE_HEAD(filenames_wq);
 static DEFINE_SPINLOCK(dev_lock);
@@ -217,6 +228,10 @@ static struct security_operations rfsdelta_security_ops = {
 	.sb_umount    =			rfsdelta_sb_umount,
 #if SUPPORT_UPDATES
         .inode_permission =             rfsdelta_inode_permission,
+#endif
+#if SUPPORT_BROKEN_STACKING
+        .register_security =            rfsdelta_register_security,
+        .unregister_security =          rfsdelta_unregister_security,
 #endif
 };
 
@@ -1175,6 +1190,18 @@ static int rfsdelta_inode_permission (struct inode *inode, int mask,
         dentry = list_entry(d_list.next, struct dentry, d_alias );
   	insert_path( dentry, 'u' );
   	return 0;
+}
+#endif
+
+#if SUPPORT_BROKEN_STACKING
+static int rfsdelta_register_security(const char *name,
+                                      struct security_operations *ops) {
+	return 0; /* Dat: this is needed so it works with `rlocate' etc. */
+}
+
+static int rfsdelta_unregister_security(const char *name,
+                                      struct security_operations *ops) {
+	return 0; /* Dat: this is needed so it works with `rlocate' etc. */
 }
 #endif
 

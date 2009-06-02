@@ -72,13 +72,18 @@ MODULE_AUTHOR("Peter Szabo");
 MODULE_DESCRIPTION("rfsdelta "RFSDELTA_VERSION" recursive filesystem change notify");
 MODULE_LICENSE("GPL");
 
+#define COMPILING 1
 #ifdef CONFIG_SECURITY
 #else
 #  error please enable CONFIG_SECURITY
+#  undef COMPILING
 #endif
 #ifdef CONFIG_SECURITY_CAPABILITIES
 #  error please disable (or modularize) CONFIG_SECURITY_CAPABILITIES
+#  undef COMPILING
 #endif
+
+#ifdef COMPILING
 
 /**** pts ****/
 #undef  SUPPORT_UPDATEDB_ARG
@@ -509,7 +514,8 @@ static ssize_t proc_rfsdelta_read( struct file *file,
                         }
                 }
                 p = pdata->pbuffer[pdata->pbuffer_pos];
-                if (p == '\0') { 
+                if (p == '\0') {
+                        /* SUXX: does it insert \0s into /proc/rfsdelta here -- why */
                         if (pdata->pbuffer[pdata->pbuffer_pos-1] == '\n') {
                                 pdata->option = NOTSET;
                         
@@ -1439,3 +1445,5 @@ static void __exit exit_rfsdelta(void)
 module_param_named(log_writes, shared.log_writes, int, 0);
 security_initcall( init_rfsdelta );
 module_exit( exit_rfsdelta );
+
+#endif /* COMPILING */

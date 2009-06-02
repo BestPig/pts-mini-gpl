@@ -1,0 +1,109 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/1999/REC-html401-19991224/strict.dtd">
+<html>
+<head>
+<META http-equiv=Content-Type content="text/html; charset=UTF-8">
+<title>Exported from Notepad++</title>
+<style type="text/css">
+span {
+	font-family: 'Courier New';
+	font-size: 10pt;
+	color: #000000;
+}
+.sc0 {
+}
+.sc1 {
+	color: #008000;
+}
+.sc4 {
+	color: #FF8000;
+}
+.sc5 {
+	font-weight: bold;
+	color: #0000FF;
+}
+.sc6 {
+	color: #808080;
+}
+.sc9 {
+	color: #804000;
+}
+.sc10 {
+	font-weight: bold;
+	color: #000080;
+}
+.sc11 {
+}
+.sc16 {
+	color: #8000FF;
+}
+</style>
+</head>
+<body>
+<div style="float: left; white-space: pre; line-height: 1; background: #FFFFFF; "><span class="sc9">#define ALONE \
+  set -ex; gcc -o "${0%.*}" -W -Wall "$0" -lsqlite3; exit 0
+</span><span class="sc1">/*
+ * sq0_demo.c: Demo for using the SQLite3 C API
+ * by pts@fazekas.hu at Thu May 28 17:28:03 CEST 2009
+ *
+ *
+ * run like this:
+ *
+ *   $ chmod +x sq0.c
+ *   $ ./sq0.c
+ *   + gcc -o sq0 -W -Wall sq0.c -lsqlite3
+ *   $ ./sq0 t.sqlite3 'CREATE TABLE foo (id INT, s TEXT)'
+ *   $ ./sq0 t.sqlite3 "INSERT INTO foo VALUES (1, 'hello')"
+ *   $ ./sq0 t.sqlite3 "INSERT INTO foo VALUES (2, 'world')"
+ *   $ ./sq0 t.sqlite3 "INSERT INTO foo VALUES (42, 'answer')"
+ *   $ ./sq0 t.sqlite3 'SELECT * FROM foo'
+ *   id = 1
+ *   s = hello
+ *
+ *   id = 2
+ *   s = world
+ *
+ *   id = 42
+ *   s = answer
+ *
+ *   $ _
+ */</span><span class="sc0">
+</span><span class="sc9">#include &lt;stdio.h&gt;
+#include &lt;sqlite3.h&gt;
+</span><span class="sc0">
+</span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">callback</span><span class="sc10">(</span><span class="sc16">void</span><span class="sc0"> </span><span class="sc10">*</span><span class="sc11">dummy</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">argc</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc16">char</span><span class="sc0"> </span><span class="sc10">**</span><span class="sc11">data</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc16">char</span><span class="sc0"> </span><span class="sc10">**</span><span class="sc11">colnames</span><span class="sc10">)</span><span class="sc0"> </span><span class="sc10">{</span><span class="sc0">
+  </span><span class="sc10">(</span><span class="sc16">void</span><span class="sc10">)</span><span class="sc11">dummy</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">i</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc5">for</span><span class="sc10">(</span><span class="sc11">i</span><span class="sc10">=</span><span class="sc4">0</span><span class="sc10">;</span><span class="sc0"> </span><span class="sc11">i</span><span class="sc10">&lt;</span><span class="sc11">argc</span><span class="sc10">;</span><span class="sc0"> </span><span class="sc10">++</span><span class="sc11">i</span><span class="sc10">){</span><span class="sc0">
+    </span><span class="sc11">printf</span><span class="sc10">(</span><span class="sc6">"%s = %s\n"</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">colnames</span><span class="sc10">[</span><span class="sc11">i</span><span class="sc10">],</span><span class="sc0"> </span><span class="sc11">data</span><span class="sc10">[</span><span class="sc11">i</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">?</span><span class="sc0"> </span><span class="sc11">data</span><span class="sc10">[</span><span class="sc11">i</span><span class="sc10">]</span><span class="sc0"> </span><span class="sc10">:</span><span class="sc0"> </span><span class="sc6">"NULL"</span><span class="sc10">);</span><span class="sc0">
+  </span><span class="sc10">}</span><span class="sc0">
+  </span><span class="sc11">printf</span><span class="sc10">(</span><span class="sc6">"\n"</span><span class="sc10">);</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc4">0</span><span class="sc10">;</span><span class="sc0">
+</span><span class="sc10">}</span><span class="sc0">
+
+</span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">main</span><span class="sc10">(</span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">argc</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc16">char</span><span class="sc0"> </span><span class="sc10">**</span><span class="sc11">argv</span><span class="sc10">){</span><span class="sc0">
+  </span><span class="sc11">sqlite3</span><span class="sc0"> </span><span class="sc10">*</span><span class="sc11">db</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc16">int</span><span class="sc0"> </span><span class="sc11">rc</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc16">char</span><span class="sc0"> </span><span class="sc10">*</span><span class="sc11">errmsg</span><span class="sc10">;</span><span class="sc0">
+
+  </span><span class="sc5">if</span><span class="sc10">(</span><span class="sc0"> </span><span class="sc11">argc</span><span class="sc10">!=</span><span class="sc4">3</span><span class="sc0"> </span><span class="sc10">){</span><span class="sc0">
+    </span><span class="sc11">fprintf</span><span class="sc10">(</span><span class="sc11">stderr</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc6">"Usage: %s DATABASE SQL-STATEMENT\n"</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">argv</span><span class="sc10">[</span><span class="sc4">0</span><span class="sc10">]);</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc4">1</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc10">}</span><span class="sc0">
+  </span><span class="sc5">if</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">SQLITE_OK</span><span class="sc0"> </span><span class="sc10">!=</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">rc</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc11">sqlite3_open</span><span class="sc10">(</span><span class="sc11">argv</span><span class="sc10">[</span><span class="sc4">1</span><span class="sc10">],</span><span class="sc0"> </span><span class="sc10">&amp;</span><span class="sc11">db</span><span class="sc10">))){</span><span class="sc0">
+    </span><span class="sc11">fprintf</span><span class="sc10">(</span><span class="sc11">stderr</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc6">"Can't open db: %s\n"</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">sqlite3_errmsg</span><span class="sc10">(</span><span class="sc11">db</span><span class="sc10">));</span><span class="sc0">
+    </span><span class="sc11">sqlite3_close</span><span class="sc10">(</span><span class="sc11">db</span><span class="sc10">);</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc4">1</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc10">}</span><span class="sc0">
+  </span><span class="sc5">if</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">SQLITE_OK</span><span class="sc0"> </span><span class="sc10">!=</span><span class="sc0"> </span><span class="sc10">(</span><span class="sc11">rc</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0">
+      </span><span class="sc11">sqlite3_exec</span><span class="sc10">(</span><span class="sc11">db</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">argv</span><span class="sc10">[</span><span class="sc4">2</span><span class="sc10">],</span><span class="sc0"> </span><span class="sc11">callback</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc4">0</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc10">&amp;</span><span class="sc11">errmsg</span><span class="sc10">)))</span><span class="sc0"> </span><span class="sc10">{</span><span class="sc0">
+    </span><span class="sc16">char</span><span class="sc0"> </span><span class="sc10">*</span><span class="sc11">errmsg</span><span class="sc0"> </span><span class="sc10">=</span><span class="sc0"> </span><span class="sc5">NULL</span><span class="sc10">;</span><span class="sc0">
+    </span><span class="sc11">fprintf</span><span class="sc10">(</span><span class="sc11">stderr</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc6">"SQL error: %s\n"</span><span class="sc10">,</span><span class="sc0"> </span><span class="sc11">errmsg</span><span class="sc10">);</span><span class="sc0">
+    </span><span class="sc11">sqlite3_free</span><span class="sc10">(</span><span class="sc11">errmsg</span><span class="sc10">);</span><span class="sc0">
+    </span><span class="sc11">sqlite3_close</span><span class="sc10">(</span><span class="sc11">db</span><span class="sc10">);</span><span class="sc0">
+    </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc4">1</span><span class="sc10">;</span><span class="sc0">
+  </span><span class="sc10">}</span><span class="sc0">
+  </span><span class="sc11">sqlite3_close</span><span class="sc10">(</span><span class="sc11">db</span><span class="sc10">);</span><span class="sc0">
+  </span><span class="sc5">return</span><span class="sc0"> </span><span class="sc4">0</span><span class="sc10">;</span><span class="sc0">
+</span><span class="sc10">}</span><span class="sc0">
+</span></div></body>
+</html>

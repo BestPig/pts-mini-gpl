@@ -1,0 +1,334 @@
+--- librsvg-2.26.0/rsvg-text.c.orig	2009-06-15 11:07:16.000000000 +0200
++++ librsvg-2.26.0/rsvg-text.c	2009-06-15 20:30:30.000000000 +0200
+@@ -44,20 +44,21 @@
+ #elif defined (CAIRO_HAS_WIN32_FONT)
+ /* nothing more needed? */
+ #include <cairo-win32.h>
+ #endif
+ 
+ typedef struct _RsvgNodeText RsvgNodeText;
+ 
+ struct _RsvgNodeText {
+     RsvgNode super;
+     RsvgLength x, y, dx, dy;
++    char *dxtra;
+ };
+ 
+ typedef struct _RsvgNodeTref RsvgNodeTref;
+ 
+ struct _RsvgNodeTref {
+     RsvgNode super;
+     RsvgNode *link;
+ };
+ char *
+ rsvg_make_valid_utf8 (const char *str, int len)
+@@ -125,72 +126,98 @@
+ 				else
+ 					*lastwasspace = FALSE;
+ 				i++;
+ 			}
+ 		}
+ 	}
+ 
+     return out;
+ }
+ 
++static void
++_rsvg_set_dx (RsvgNodeText * text, const char * value)
++{
++    const char *p;
++    while (*value == ' ') ++value;
++    p = value;
++    while (*p != '\0' && *p != ' ') ++p;
++    if (*p == ' ') {
++      char *q = g_strdup(value);
++      q[p - value] = '\0';  /* close first dimension for the parsing below */
++      text->dx = _rsvg_css_parse_length(q);
++      q += p - value + 1;
++      while (*q == ' ') ++q; 
++      text->dxtra = q;
++      /* printf("DX=(%s) dxtra=(%s)\n", value, text->dxtra); */
++      /* TODO(pts): Prevent memory leak in g_strdup. */
++    } else {
++      text->dx = _rsvg_css_parse_length(value);
++      text->dxtra = NULL;
++    }
++}
+ 
+ static void
+ _rsvg_node_text_set_atts (RsvgNode * self, RsvgHandle * ctx, RsvgPropertyBag * atts)
+ {
+     const char *klazz = NULL, *id = NULL, *value;
+     RsvgNodeText *text = (RsvgNodeText *) self;
+ 
+     if (rsvg_property_bag_size (atts)) {
+         if ((value = rsvg_property_bag_lookup (atts, "x")))
+             text->x = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "y")))
+             text->y = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "dx")))
+-            text->dx = _rsvg_css_parse_length (value);
++            _rsvg_set_dx(text, value);
+         if ((value = rsvg_property_bag_lookup (atts, "dy")))
+             text->dy = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "class")))
+             klazz = value;
+         if ((value = rsvg_property_bag_lookup (atts, "id"))) {
+             id = value;
+             rsvg_defs_register_name (ctx->priv->defs, value, self);
+         }
++        text->dxtra = NULL;
+ 
+         rsvg_parse_style_attrs (ctx, self->state, "text", klazz, id, atts);
+     }
+ }
+ 
+ void
+  rsvg_text_render_text (RsvgDrawingCtx * ctx, const char *text, gdouble * x, gdouble * y);
+ 
++void
++ rsvg_text_render_text_pts (RsvgDrawingCtx * ctx, const char *text, gdouble * x, gdouble * y, const char *dxtra);
++
+ 
+ static void
+  _rsvg_node_text_type_tspan (RsvgNodeText * self, RsvgDrawingCtx * ctx,
+                              gdouble * x, gdouble * y, gboolean * lastwasspace);
+ 
+ static void
+  _rsvg_node_text_type_tref (RsvgNodeTref * self, RsvgDrawingCtx * ctx,
+                             gdouble * x, gdouble * y, gboolean * lastwasspace);
+ 
+ static void
+ _rsvg_node_text_type_children (RsvgNode * self, RsvgDrawingCtx * ctx,
++                               const char* dxtra,
+                                gdouble * x, gdouble * y, gboolean * lastwasspace)
+ {
+     guint i;
+ 
+     rsvg_push_discrete_layer (ctx);
+     for (i = 0; i < self->children->len; i++) {
+         RsvgNode *node = g_ptr_array_index (self->children, i);
+         if (!strcmp (node->type->str, "RSVG_NODE_CHARS")) {
+             RsvgNodeChars *chars = (RsvgNodeChars *) node;
+             GString *str = _rsvg_text_chomp (rsvg_state_current (ctx), chars->contents, lastwasspace);
+-            rsvg_text_render_text (ctx, str->str, x, y);
++            rsvg_text_render_text_pts (ctx, str->str, x, y, dxtra);
+             g_string_free (str, TRUE);
+         } else if (!strcmp (node->type->str, "tspan")) {
+             RsvgNodeText *tspan = (RsvgNodeText *) node;
+             rsvg_state_push (ctx);
+             _rsvg_node_text_type_tspan (tspan, ctx, x, y, lastwasspace);
+             rsvg_state_pop (ctx);
+         } else if (!strcmp (node->type->str, "tref")) {
+             RsvgNodeTref *tref = (RsvgNodeTref *) node;
+             _rsvg_node_text_type_tref (tref, ctx, x, y, lastwasspace);
+         }
+@@ -251,21 +278,21 @@
+     if (rsvg_state_current (ctx)->text_anchor != TEXT_ANCHOR_START) {
+         double length = 0;
+         _rsvg_node_text_length_children (self, ctx, &length, &lastwasspace);
+         if (rsvg_state_current (ctx)->text_anchor == TEXT_ANCHOR_END)
+             x -= length;
+         if (rsvg_state_current (ctx)->text_anchor == TEXT_ANCHOR_MIDDLE)
+             x -= length / 2;
+     }
+ 
+     lastwasspace = TRUE;
+-    _rsvg_node_text_type_children (self, ctx, &x, &y, &lastwasspace);
++    _rsvg_node_text_type_children (self, ctx, text->dxtra, &x, &y, &lastwasspace);
+ }
+ 
+ RsvgNode *
+ rsvg_new_text (void)
+ {
+     RsvgNodeText *text;
+     text = g_new (RsvgNodeText, 1);
+     _rsvg_node_init (&text->super);
+     text->super.draw = _rsvg_node_text_draw;
+     text->super.set_atts = _rsvg_node_text_set_atts;
+@@ -286,23 +313,24 @@
+             gboolean lws = *lastwasspace;
+             _rsvg_node_text_length_children (&self->super, ctx, &length, &lws);
+             if (rsvg_state_current (ctx)->text_anchor == TEXT_ANCHOR_END)
+                 *x -= length;
+             if (rsvg_state_current (ctx)->text_anchor == TEXT_ANCHOR_MIDDLE)
+                 *x -= length / 2;
+         }
+     }
+     if (self->y.factor != 'n')
+         *y = _rsvg_css_normalize_length (&self->y, ctx, 'v');
++    /* before the whole text */
+     *x += _rsvg_css_normalize_length (&self->dx, ctx, 'h');
+     *y += _rsvg_css_normalize_length (&self->dy, ctx, 'v');
+-    _rsvg_node_text_type_children (&self->super, ctx, x, y, lastwasspace);
++    _rsvg_node_text_type_children (&self->super, ctx, self->dxtra, x, y, lastwasspace);
+ }
+ 
+ static int
+ _rsvg_node_text_length_tspan (RsvgNodeText * self, RsvgDrawingCtx * ctx, gdouble * x,
+                               gboolean * lastwasspace)
+ {
+     if (self->x.factor != 'n' || self->y.factor != 'n')
+         return TRUE;
+     return _rsvg_node_text_length_children (&self->super, ctx, x, lastwasspace);
+ }
+@@ -312,21 +340,21 @@
+ {
+     const char *klazz = NULL, *id = NULL, *value;
+     RsvgNodeText *text = (RsvgNodeText *) self;
+ 
+     if (rsvg_property_bag_size (atts)) {
+         if ((value = rsvg_property_bag_lookup (atts, "x")))
+             text->x = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "y")))
+             text->y = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "dx")))
+-            text->dx = _rsvg_css_parse_length (value);
++            _rsvg_set_dx(text, value);
+         if ((value = rsvg_property_bag_lookup (atts, "dy")))
+             text->dy = _rsvg_css_parse_length (value);
+         if ((value = rsvg_property_bag_lookup (atts, "class")))
+             klazz = value;
+         if ((value = rsvg_property_bag_lookup (atts, "id"))) {
+             id = value;
+             rsvg_defs_register_name (ctx->priv->defs, value, self);
+         }
+ 
+         rsvg_parse_style_attrs (ctx, self->state, "tspan", klazz, id, atts);
+@@ -335,29 +363,30 @@
+ 
+ RsvgNode *
+ rsvg_new_tspan (void)
+ {
+     RsvgNodeText *text;
+     text = g_new (RsvgNodeText, 1);
+     _rsvg_node_init (&text->super);
+     text->super.set_atts = _rsvg_node_tspan_set_atts;
+     text->x.factor = text->y.factor = 'n';
+     text->dx = text->dy = _rsvg_css_parse_length ("0");
++    text->dxtra = NULL;
+     return &text->super;
+ }
+ 
+ static void
+ _rsvg_node_text_type_tref (RsvgNodeTref * self, RsvgDrawingCtx * ctx,
+                            gdouble * x, gdouble * y, gboolean * lastwasspace)
+ {
+     if (self->link)
+-        _rsvg_node_text_type_children (self->link, ctx, x, y, lastwasspace);
++        _rsvg_node_text_type_children (self->link, ctx, NULL, x, y, lastwasspace);
+ }
+ 
+ static int
+ _rsvg_node_text_length_tref (RsvgNodeTref * self, RsvgDrawingCtx * ctx, gdouble * x,
+                              gboolean * lastwasspace)
+ {
+     if (self->link)
+         return _rsvg_node_text_length_children (self->link, ctx, x, lastwasspace);
+     return FALSE;
+ }
+@@ -911,43 +940,104 @@
+ 
+     *x = layout->x;
+     *y = layout->y;
+ 
+     output = g_string_new (render->path->str);
+     rsvg_render_ctx_free (render);
+     rsvg_text_layout_free (layout);
+     return output;
+ }
+ 
++#define UTF8_CHAR_LENGTH(c) ( \
++    ((c) & 0xE0) == 0xC0 ? 2 : \
++    ((c) & 0xF0) == 0xE0 ? 3 : \
++    ((c) & 0xF8) == 0xF0 ? 4 : \
++    1)
++
++void
++rsvg_text_render_text_pts (RsvgDrawingCtx * ctx, const char *text, gdouble * x, gdouble * y, const char *dxtra)
++{
++  /**** pts ****/
++  char *qa;
++  char *buf = NULL;
++  const char *p;
++  int a, b, zero_count = 1;
++  RsvgLength dx;
++  gdouble ndx;
++  if (dxtra == NULL) dxtra = "";
++  /* printf("RPTS TEXT=(%s) DXTRA=(%s)\n", text, dxtra); */
++  
++  while (*text != '\0') {
++    while (*dxtra == ' ') ++dxtra;
++    while (1) {
++      p = dxtra;
++      if (*dxtra == '\0') break;
++      while (*dxtra != '\0' && *dxtra != ' ') ++dxtra;
++      if (dxtra - p != 1 && *p != '0') break;
++      while (*dxtra == ' ') ++dxtra;
++      ++zero_count;
++    }
++    if (p == dxtra) {  /* No more manual kerning. */
++      rsvg_text_render_text(ctx, text, x, y);
++      break;
++    }
++    qa = g_strdup(p);  /* TODO(pts): Save memory. */
++    qa[dxtra - p] = '\0';
++    while (*dxtra == ' ') ++dxtra;
++    dx = _rsvg_css_parse_length (qa);  /* ignores everything after a space */
++    g_free(qa);
++    ndx = _rsvg_css_normalize_length (&dx, ctx, 'h');
++    if (buf == NULL)
++      buf = g_strdup(text);
++    for (a = zero_count, b = 0; a > 0; --a) {
++      g_assert(text[b] != '\0');
++      b += UTF8_CHAR_LENGTH(text[b]);
++    }
++    memcpy(buf, text, b);
++    buf[b] = '\0';
++    printf("zc=%d dx=%g#%d ndx=%g buf=(%s) dxtra=(%s) p=(%s)\n",
++         zero_count, dx.length, dx.factor, ndx, buf, dxtra, p);
++    rsvg_text_render_text(ctx, buf, x, y);
++    text += b;
++    *x += ndx;
++    zero_count = 1;
++  }
++  g_free(buf);
++}
++
++
+ void
+ rsvg_text_render_text (RsvgDrawingCtx * ctx, const char *text, gdouble * x, gdouble * y)
+ {
+     if (ctx->render->create_pango_context && ctx->render->render_pango_layout) {
+         PangoContext *context;
+         PangoLayout *layout;
+         PangoLayoutIter *iter;
+         RsvgState *state;
+         gint w, h, baseline;
+ 
++        /* REACHED */
++        /* supports kerning */
+         state = rsvg_state_current (ctx);
+         context = ctx->render->create_pango_context (ctx);
+         layout = rsvg_text_create_layout (ctx, state, text, context);
+         pango_layout_get_size (layout, &w, &h);
+         iter = pango_layout_get_iter (layout);
+         baseline = pango_layout_iter_get_baseline (iter) / (double)PANGO_SCALE;
+         pango_layout_iter_free (iter);
+         ctx->render->render_pango_layout (ctx, layout, *x, *y - baseline);
+         *x += w / (double)PANGO_SCALE;
+         g_object_unref (layout);
+         g_object_unref (context);
+     } else {
+         GString *render;
++        /* this doesn't support kerning */
+         render = rsvg_text_render_text_as_string (ctx, text, x, y);
+         rsvg_render_path (ctx, render->str);
+         g_string_free (render, TRUE);
+     }
+ }
+ 
+ static gdouble
+ rsvg_text_layout_width (RsvgTextLayout * layout)
+ {
+     gint width;

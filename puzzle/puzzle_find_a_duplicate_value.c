@@ -23,7 +23,7 @@
 
 int find_duplicate_value(int *a, const int n) {
   int i = 0, j, k;
-  while (i < n) {
+  while (i <= n) {
     j = a[i];
     if (j == i) {
       ++i;
@@ -39,16 +39,19 @@ int find_duplicate_value(int *a, const int n) {
   abort();  /* should not happen */
 }
 
-int a[9999];
+#define ASIZE 10000
+int a[ASIZE];
 
 int main(int argc, char **argv) {
   int n, i;
   (void)argc; (void)argv;
   while (0 < scanf("%d", &n)) {
-    for (i = 0; i < n; ++i) {
+    if (n < 1 || n >= ASIZE)
+      abort();
+    for (i = 0; i <= n; ++i) {
       if (0 >= scanf("%d", a + i))
         abort();
-      if (a[i] < 0 || a[i] > n)
+      if (a[i] < 0 || a[i] >= n)
         abort();
     }
     printf("%d\n", find_duplicate_value(a, n));

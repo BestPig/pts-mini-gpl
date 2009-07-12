@@ -6,25 +6,21 @@
  * by pts@fazekas.hu at Sun Jul 12 20:09:30 CEST 2009
  *
  * This program solves the problem:
- *   You're given an array with N+1 cells (the cells are numbered 0 to N). The
- *   array is filled with integers from 0 to N-1 (a total of N integers).
- *   Suggest an algorithm that finds a number that appears twice in the array
- *   (if there are several of them, one of them will do) when you all you can
- *   use is the array and two integer variables. The solution must run in O(N)
- *   (in simple words - you may access each element of the array a constant
- *   number of times).
- *   [it is OK to change the array]
+ *   You're given an array with N+1 cells (the cells are numbered 0 to N).
+ *   The array is filled with integers from 0 to N-1 (a total of N
+ *   integers). Suggest an algorithm that finds a number that appears twice
+ *   in the array (if there are several of them, one of them will do) when
+ *   you all you can use is the array read-only and five integer variables
+ *   read-write. The solution must run in O(N * log(N)) time. Write a C
+ *   program as well.
  *
- * Problem from
+ * Problem based on original problem A on
  * http://neworder.box.sk/forum/topic41133-who-appears-twice.html
- *
- * This solution is slower (O(N *log(N)), and it uses a few more variables,
- * but it doesn't modify the array.
  */
 #include <stdio.h>
 #include <stdlib.h>
 
-int find_duplicate_value_bitmask(int *a, const int n) {
+int find_duplicate_value_bitmask(const int *a, const int n) {
   int pattern = 0;
   int mask = 1;
   int c, i;

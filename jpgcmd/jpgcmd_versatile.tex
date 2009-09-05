@@ -48,31 +48,29 @@
   \afterassignment\skipuntilhbox
   #1#2pt\space\space\hbox\jpgparse}
 
+\def\jpgdeptherror#1{%
+  \errmessage{depth specified for jpg}\jpgparse}
+
 \def\jpgparse#1 {%
   \ifprefix{height}{#1}{\jpgsetdimen\jpgwidth}{%
   \ifprefix{width}{#1}{\jpgsetdimen\jpgheight}{%
+  \ifprefix{depth}{#1}{\jpgdeptherror}{%
   \ifprefix{scale}{#1}{\jpgsetfloat\jpgscale}{%
-  \jpgshow{#1}}}}}
+  \jpgshow{#1}}}}}}
 
 \def\jpgshow#1{%
   \message{JPG file=#1 width=\the\jpgwidth\space height=\the\jpgheight\space
            scale=\the\jpgscale;}%
 }
 
-hhello%
-\jpg height3cm smiley.jpg
-world%
-\jpg width3cm smiley.jpg
-foo%
-\jpg width4cm height=3cm smiley.jpg
-bar
+ABC\jpg height3cm smiley.jpg
+DEF\jpg width3cm smiley.jpg
+GHI\jpg width4cm height=3cm smiley.jpg
+JKL\jpg width3cm scale=4 smiley.jpg
 
-\jpg width3cm scale=4 smiley.jpg
-
-\jpg width3cm scale=4pt smiley.jpg
-
-done
-
-\jpg smiley.jpg
+% test for \par in the line above
+MNO\jpg width3cm scale=4pt smiley.jpg
+PQR\jpg smiley.jpg
+STU\jpg depth5cm smiley.jpg
 
 \end

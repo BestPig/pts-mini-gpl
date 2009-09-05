@@ -1,0 +1,78 @@
+%
+% jpgcmdmanual.tex: a versatile braceless image inclusion TeX macro
+% by pts@fazekas.hu at Thu Sep  3 11:01:07 CEST 2009
+%
+% This is one of the winning solutions for the problem proposed by Kees
+% van der Laan on the conference EuroTeX 2009 (2009-08-31).
+
+% If #2 starts with #1, then do #3{#z}, otherwise do #4. We get #z by removing
+% #2 from the beginning of #1.
+\def\ifprefix#1#2#3#4{%
+  \ifprefixloop#1\hbox\vbox!#2\hbox\vbox!{#3}{#4}%
+}
+
+\def\firstoftwo#1#2{#1}
+\def\secondoftwo#1#2{#2}
+\def\ifxgroup#1#2{%
+  \ifx#1#2\expandafter\firstoftwo\else\expandafter\secondoftwo\fi}
+\def\striphbox#1\hbox\vbox!#2#3{#2{#1}}
+\def\ifprefixloop#1#2\vbox!#3#4\vbox!{%
+  \ifxgroup#1\hbox{\striphbox#3#4\vbox!}{%
+  \ifxgroup#1#3{\ifprefixloop#2\vbox!#4\vbox!}\secondoftwo}}
+
+% Tests.
+\def\paren#1{(#1)}
+\message{\ifprefix{}{barden}{1\paren}{0}!}
+\message{\ifprefix{bar}{barden}{1\paren}{0}!}
+\message{\ifprefix{bar}{bad}{1\paren}{0}!}
+\message{\ifprefix{bar}{ba}{1\paren}{0}!}
+
+\newdimen\jpgwidth
+\newdimen\jpgheight
+\newdimen\jpgscale
+
+\def\jpg{%
+  \jpgwidth0pt
+  \jpgheight0pt
+  \jpgscale0pt
+  \jpgparse}
+
+% #2 can start with or without =.
+\def\jpgsetdimen#1#2{#1#2 \jpgparse}
+
+\def\skipuntilhbox#1\hbox{}
+
+% #2 can start with or without =.
+% #2 can end with `pt' or not.
+\def\jpgsetfloat#1#2{
+  \afterassignment\skipuntilhbox
+  #1#2pt\space\space\hbox\jpgparse}
+
+\def\jpgparse#1 {%
+  \ifprefix{height}{#1}{\jpgsetdimen\jpgwidth}{%
+  \ifprefix{width}{#1}{\jpgsetdimen\jpgheight}{%
+  \ifprefix{scale}{#1}{\jpgsetfloat\jpgscale}{%
+  \jpgshow{#1}}}}}
+
+\def\jpgshow#1{%
+  \message{JPG file=#1 width=\the\jpgwidth\space height=\the\jpgheight\space
+           scale=\the\jpgscale;}%
+}
+
+hhello%
+\jpg height3cm smiley.jpg
+world%
+\jpg width3cm smiley.jpg
+foo%
+\jpg width4cm height=3cm smiley.jpg
+bar
+
+\jpg width3cm scale=4 smiley.jpg
+
+\jpg width3cm scale=4pt smiley.jpg
+
+done
+
+\jpg smiley.jpg
+
+\end

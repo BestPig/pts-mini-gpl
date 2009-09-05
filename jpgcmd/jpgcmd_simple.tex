@@ -1,0 +1,34 @@
+%
+% jpgcmd.tex: a simple braceless image inclusion TeX macro
+% by pts@fazekas.hu at Mon Aug 31 13:42:49 CEST 2009
+%
+% This is one of the winning solutions for the problem proposed by Kees
+% van der Laan on the conference EuroTeX 2009 (2009-08-31).
+
+\def\jpgfilename#1 {%
+  \egroup  % end of the \setbox0\vbox
+  %\showthe\dp0
+  \ifdim\dp0=0pt \else \errmessage{depth specified for jpg}\fi%
+  %\pdfximage
+  %  \ifdim\wd0=0pt  \else width\wd0\fi
+  %  \ifdim\ht0=0pt  \else height\ht0\fi
+  %  {#1}%
+  %\pdfrefximage\pdflastximage
+  \message{JPG file=#1 width=\the\wd0 \space height=\the\ht0;}%
+  \endgroup}
+\def\jpg{%
+  \begingroup
+  \setbox0\vtop\bgroup
+  \hsize0pt \parindent0pt
+  \everypar{\jpgfilename}%
+  \hrule height0pt }
+
+ABC\jpg height3cm smiley.jpg
+DEF\jpg width3cm smiley.jpg
+GHI\jpg width4cm height3cm smiley.jpg
+JKL\jpg width3cm smiley.jpg
+
+MNO\jpg smiley.jpg  % test for \par in the line below
+PQR\jpg depth5mm smiley.jpg
+
+\end

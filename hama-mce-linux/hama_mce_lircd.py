@@ -4,6 +4,16 @@
 by pts@fazekas.hu at Sun Oct 18 17:08:26 CEST 2009
 --- Thu Oct 22 23:43:39 CEST 2009
 
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
 hama_mce_lircd.py is a proof-of-concept stand-alone lircd implementation for
 Linux 2.6, which receives and broadcasts button presses from the Hama MCE
 remote control.  It is implemented in Python (2.4, 2.5 and 2.6 work), and it

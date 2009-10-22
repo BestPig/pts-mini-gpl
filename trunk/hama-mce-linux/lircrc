@@ -1,0 +1,203 @@
+#
+# $HOME/.lircrc for hama_mce_lircd.py
+# by pts@fazekas.hu at Thu Oct 22 23:50:22 CEST 2009
+#
+# * `config =' values taken from /etc/mplayer/input.conf
+# * read more about mplayer's lirc configuration on
+#   http://www.mplayerhq.hu/DOCS/HTML/en/control.html
+
+begin
+  remote = hama-mce
+  button = stop
+  prog   = irexec
+  config = echo "STOP"
+end
+
+begin
+  remote = hama-mce
+  button = stop
+  prog   = mplayer
+  config = quit
+end
+
+begin
+  remote = hama-mce
+  button = volumeplus
+  prog   = mplayer
+  config = volume 1
+end
+
+begin
+  remote = hama-mce
+  button = volumeminus
+  prog   = mplayer
+  config = volume -1
+end
+
+begin
+  remote = hama-mce
+  button = volumemute
+  prog   = mplayer
+  config = mute
+end
+
+begin
+  remote = hama-mce
+  button = playpause
+  prog   = mplayer
+  config = pause
+end
+
+begin
+  remote = hama-mce
+  button = channelplus
+  prog   = mplayer
+  config = speed_mult 1.1
+end
+
+begin
+  remote = hama-mce
+  button = channelminus
+  prog   = mplayer
+  config = speed_mult 0.9091
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-2
+  prog   = mplayer
+  config = seek +2
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-4
+  prog   = mplayer
+  config = seek +4
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-6
+  prog   = mplayer
+  config = seek +6
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-8
+  prog   = mplayer
+  config = seek +8
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-10
+  prog   = mplayer
+  config = seek +10
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-12
+  prog   = mplayer
+  config = seek +12
+end
+
+begin
+  remote = hama-mce
+  button = mouse-right-14
+  prog   = mplayer
+  config = seek +14
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-2
+  prog   = mplayer
+  config = seek -2
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-4
+  prog   = mplayer
+  config = seek -4
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-6
+  prog   = mplayer
+  config = seek -6
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-8
+  prog   = mplayer
+  config = seek -8
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-10
+  prog   = mplayer
+  config = seek -10
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-12
+  prog   = mplayer
+  config = seek -12
+end
+
+begin
+  remote = hama-mce
+  button = mouse-left-14
+  prog   = mplayer
+  config = seek -14
+end
+
+begin
+  remote = hama-mce
+  button = hashmark
+  prog   = mplayer
+  config = switch_audio
+end
+
+begin
+  remote = hama-mce
+  button = left
+  prog   = mplayer
+  config = audio_delay -0.1
+end
+
+begin
+  remote = hama-mce
+  button = right
+  prog   = mplayer
+  config = audio_delay +0.1
+end
+
+begin
+  remote = hama-mce
+  button = down
+  prog   = mplayer
+  config = sub_delay -0.1
+end
+
+begin
+  remote = hama-mce
+  button = up
+  prog   = mplayer
+  config = sub_delay +0.1
+end
+
+begin
+  remote = hama-mce
+  button = fullforward
+  prog   = mplayer
+  config = pt_step 1 1
+end

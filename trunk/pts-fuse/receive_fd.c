@@ -122,6 +122,6 @@ init_receive_fd(void)
 exit:
   if (PyErr_Occurred()) {
     /* PyErr_Print(); */
-    PyErr_SetString(PyExc_ImportError, "pytc: init failed");
+    PyErr_SetString(PyExc_ImportError, "receive_fd: init failed");
   }
 }

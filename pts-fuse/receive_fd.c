@@ -18,7 +18,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 
 /* Based on receive_fd() in fuse-2.5.3/lib/mount.c, should work on Linux.
  * errbuf must be 256 characters maximum.
@@ -51,7 +50,7 @@ static int receive_fd(int fd, char *errbuf) {
   while(((rv = recvmsg(fd, &msg, 0)) == -1) && errno == EINTR);
   if (rv == -1) {
     /* TODO(pts): propagate errno to Python. */
-    snprintf(errbuf, 256, "recvmsg: %s\n", strerror(errno));
+    snprintf(errbuf, 256, "recvmsg: %s", strerror(errno));
     return -1;
   }
   if(!rv) {
@@ -61,13 +60,13 @@ static int receive_fd(int fd, char *errbuf) {
 
   cmsg = CMSG_FIRSTHDR(&msg);
   if (!cmsg->cmsg_type == SCM_RIGHTS) {
-    snprintf(errbuf, 256, "got control message of unknown type %d\n",
+    snprintf(errbuf, 256, "got control message of unknown type %d",
              cmsg->cmsg_type);
     return -1;
   }
   rv = *(int*)CMSG_DATA(cmsg);
   if (rv < 0) {
-    snprintf(errbuf, 256, "received negative fd %d\n", rv);
+    snprintf(errbuf, 256, "received negative fd %d", rv);
     return -1;
   }
   return rv;
@@ -87,7 +86,7 @@ static PyObject *receive_fd_function(PyObject *self, PyObject *args) {
   }
   got_fd = receive_fd(fd, errbuf);
   if (got_fd < 0) {
-    PyErr_SetString(PyExc_OSError, errbuf);
+    PyErr_SetFromErrnoWithFilename(PyExc_OSError, errbuf);
     return NULL;
   }
   return PyInt_FromLong(got_fd);

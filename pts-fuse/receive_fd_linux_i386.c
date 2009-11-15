@@ -1,13 +1,16 @@
 /*
  * receive_fd_linux_i386.c: receive_fd() implementation without #include
  * by pts@fazekas.hu at Sun Nov 15 10:49:44 CET 2009
+ *
+ * This supports the i386 and the x86_64 architecture.
  */
 
-extern int errno;  // SUXX: this is not a glibc exported symbol.
+extern int *__errno_location();  /* glibc */
+#define errno (*__errno_location())
 #define EINTR 4
 
-typedef int ssize_t;  /* 4 */
-typedef unsigned int size_t;  /* 4 */
+typedef long ssize_t;  /* 4 or 8 */
+typedef unsigned long size_t;  /* 4 or 8 */
 typedef unsigned int socklen_t;  /* 4 */
 
 struct iovec {  /* 8 */

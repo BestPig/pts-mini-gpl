@@ -46,6 +46,7 @@ static int receive_fd(int fd, char *errbuf) {
    * msg_control; the interface is different. */
   msg.msg_control = ccmsg;
   msg.msg_controllen = sizeof(ccmsg);
+  msg.msg_flags = 0;
 
   while(((rv = recvmsg(fd, &msg, 0)) == -1) && errno == EINTR);
   if (rv == -1) {

@@ -20,7 +20,7 @@ import sys
 try:
   import _receive_fd
 except ImportError, e:
-  if str(e) == 'No module named _receive_fdd':
+  if str(e) == 'No module named _receive_fd':
     print >>sys.stderr, (
         'error: please compile receive_fd.c to an .so file first')
     sys.exit(2)
@@ -112,6 +112,154 @@ class Config(object):
       raise InvalidConfigError
 
 
+class ReceiveFdError(OSError):
+  """Raised when ReceiveFd() cannot receive the file descriptor."""
+
+class ReceiveFdPlatformError(Exception):
+  """Raised when the ReceiveFd() doesn't work on this platform."""
+
+
+def ReceiveFdUsingDl(from_fd):
+  if sys.platform != 'linux2':
+    raise ReceiveFdPlatformError('32-bit Linux expected, got non-Linux')
+  if struct.calcsize('l') != 4:
+    raise ReceiveFdPlatformError('32-bit Linux expected, got non-32-bit')
+  try:
+    dl = __import__('dl')  # dl.so is not present on amd64
+  except ImportError:
+    raise ReceiveFdPlatformError('dl.so not found for 32-bit Linux')
+
+  # Find out the name of libc.so in use.
+  libc_so_filename = None
+  f = open('/proc/self/maps')
+  try:
+    for line in f:
+      path = line.split()[-1]
+      if path.endswith('.so'):
+        filename = path.split('/')[-1]
+        if filename == 'libc.so' or filename.startswith('libc-'):
+          # Example filename: 'libc-2.3.5.so'
+          libc_so_filename = path
+          break
+  finally:
+    f.close()
+
+  d = dl.open(libc_so_filename)
+  buf = 'B' * 4
+  buf_addr = d.call('memcpy', buf, buf, 0)
+  ccmsg = '\0' * 16
+  ccmsg_addr = d.call('memcpy', ccmsg, ccmsg, 0)
+  iov = struct.pack('=ll', buf_addr, 1)
+  iov_addr = d.call('memcpy', iov, iov, 0)
+  msg = struct.pack('=lllllll', 0, 0, iov_addr, 1, ccmsg_addr, 16, 0)
+  rv = d.call('recvmsg', from_fd, msg, 0)
+  if rv < 0:
+    # SUXX: We cannot repeat this (rv =) on EINTR, because it is
+    # impossible to query errno with `import dl' (too late).
+    raise ReceiveFdError('recvmsg failed for receive_fd')
+  if rv == 0:
+    raise ReceiveFdError('fd not received')
+  msg_control, msg_controllen = struct.unpack('=ll', msg[16 : 24])
+  if not (16 <= msg_controllen <= 24):  # Should always be 16.
+    raise ReceiveFdError('msg_controllen out of bounds: %d' % msg_controllen)
+  msg_control_data = '\0' * 16
+  d.call('memcpy', msg_control_data, msg_control, 16)
+  cmsg_len, cmsg_level, cmsg_type, cmsg_data = struct.unpack(
+      '=llll', msg_control_data)
+  if cmsg_type != 1:
+    raise ReceiveFdError('cmsg_type=SCM_RIGHTS expected for receive_fd')
+  if cmsg_level != socket.SOL_SOCKET:
+    raise ReceiveFdError('cmsg_level=SOL_SOCKET expected for receive_fd')
+  return cmsg_data
+
+def ReceiveFdUsingCtypes(from_fd):
+  # Python 2.5 has ctypes built in.
+  if sys.platform != 'linux2':
+    raise ReceiveFdPlatformError('32-bit Linux expected, got non-Linux')
+  lsize = struct.calcsize('l')
+  if lsize not in (4, 8) or struct.calcsize('i') != 4:
+    raise ReceiveFdPlatformError('32 or 64-bit Linux expected, got bad bits')
+  try:
+    ctypes = __import__('ctypes')
+    __import__('ctypes.util')
+  except ImportError:
+    raise ReceiveFdPlatformError('module ctypes not found')
+  if ctypes.sizeof(ctypes.c_void_p) != lsize:
+    # TODO(pts): Use ctypes instead of struct.pack to work around this.
+    raise ReceiveFdPlatformError('inconsistent pointer and long size')
+  fmt_ptr = fmt_long = 'l'
+  fmt_int = 'i'
+  if lsize == 4:
+    fmt_intpad = 'i'
+  else:
+    fmt_intpad = 'i4x'  # and int padded to a long
+  d = ctypes.CDLL(ctypes.util.find_library('c'))
+  buf = ctypes.create_string_buffer('BBBB')
+  buf_addr = ctypes.addressof(buf)
+  cmsg_fmt = fmt_long + fmt_int + fmt_int + fmt_intpad
+  cmsg_size = struct.calcsize(cmsg_fmt)
+  ccmsg = ctypes.create_string_buffer('\0' * cmsg_size)
+  ccmsg_addr = ctypes.addressof(ccmsg)
+  # We add the last 0 just to ensure padding on amd64, where
+  # sizeof(iovec)==16.
+  iov = ctypes.create_string_buffer(struct.pack(
+      fmt_ptr + fmt_intpad, buf_addr, 1))
+  iov_addr = ctypes.addressof(iov)
+  msg_fmt = ''.join([fmt_ptr, fmt_intpad, fmt_ptr, fmt_intpad, fmt_ptr,
+                     fmt_intpad, fmt_intpad])
+  msg = ctypes.create_string_buffer(struct.pack(
+      msg_fmt, 0, 0, iov_addr, 1, ccmsg_addr, cmsg_size, 0))
+  while True:
+    rv = d.recvmsg(from_fd, msg, 0)
+    if rv >= 0:
+      break
+    errno_value = ctypes.cast(d.__errno_location(), c_int_p).contents.value
+    if errno_value != errno.EINTR:
+      raise ReceiveFdError('receivemsg failed for receive_fd: [Errno %d] %s' %
+                           (errno_value, os.strerror(errno_value)))
+  if rv == 0:
+    raise ReceiveFdError('fd not received')
+  _, _, _, _, msg_control, msg_controllen, _ = struct.unpack(
+      msg_fmt + 'x', msg.raw)
+  if not (cmsg_size <= msg_controllen <= cmsg_size + 8):
+    # Should always be 16 or 24.
+    raise ReceiveFdError('msg_controllen out of bounds: %d' % msg_controllen)
+  msg_control_data = ctypes.create_string_buffer('\0' * cmsg_size)
+  ctypes.memmove(msg_control_data, msg_control, cmsg_size)
+  cmsg_len, cmsg_level, cmsg_type, cmsg_data = struct.unpack(
+      cmsg_fmt + 'x', msg_control_data.raw)
+  if cmsg_type != 1:
+    raise ReceiveFdError('cmsg_type=SCM_RIGHTS expected for receive_fd')
+  if cmsg_level != socket.SOL_SOCKET:
+    raise ReceiveFdError('cmsg_level=SOL_SOCKET expected for receive_fd')
+  return cmsg_data
+
+def ReceiveFdUsingCustomReceiveFdSo(from_fd):
+  try:
+    d = __import__('_receive_fd')
+  except ImportError:
+    raise ReceiveFdPlatformError('module _receive_fd not found')
+  try:
+    return d.receive_fd(from_fd)
+  except OSError, e:
+    raise ReceiveFdError(str(e))
+
+def ReceiveFd(from_fd):
+  try:
+    return ReceiveFdUsingCtypes(from_fd)
+  except ReceiveFdPlatformError, e:
+    try:
+      return ReceiveFdUsingDl(from_fd)
+    except ReceiveFdPlatformError, f:
+      try:
+        return ReceiveFdUsingCustomReceiveFdSo(from_fd)
+      except ReceiveFdPlatformError, g:
+        print >>sys.stderr, (
+            'error: cannot find receive_fd implementation '
+            '(%s; %s; %s), try compiling receive_fd.c' % (e, f, g))
+        sys.exit(2)
+
+
 def QuoteShellWord(data):
   if re.match(r'[-_/+.A-Za-z0-9][-_/+=.A-Za-z0-9]*\Z', data):
     return data
@@ -167,7 +315,7 @@ def FuseMount(mount_prog, mount_point, mount_opts):
     assert not os.system('export _FUSE_COMMFD=%s; %s%s %s' %
         (fd0.fileno(), mount_prog, opt_str, QuoteShellWord(mount_point))), (
         'fusermount failed (see above)')
-    return _receive_fd.receive_fd(fd1.fileno())
+    return ReceiveFd(fd1.fileno())
   finally:
     fd0.close()
     fd1.close()

@@ -7,6 +7,8 @@ This module supports the S3 GET and PUT operations over HTTP (not HTTPS).
 This module is written for educational purposes for those wanting to implement
 their own client.
 
+This module works in Python 2.4, 2.5 and 2.6.
+
 See http://docs.amazonwebservices.com/AmazonS3/latest/index.html?RESTAuthentication.html
 and for the documentation of the protocol.
 

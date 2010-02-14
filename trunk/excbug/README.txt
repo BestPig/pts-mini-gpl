@@ -10,7 +10,7 @@ Requirements:
 
 Installation once the requirements are met:
 
-  $ pyrexc excbug.c
+  $ pyrexc excbug.pyx
   $ python2.6 setup.py build
   $ sudo python2.6 setup.py install
 

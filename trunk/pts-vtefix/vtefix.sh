@@ -65,14 +65,14 @@ exec perl -we '
          /sgx) {
     push @L, pos($_) - 1;
   }
-  pop @L if @L == 2 and vec($_, $L[0], 8) == 0xf6 and
-                          vec($_, $L[1], 8) == 0xf6;
+  # We patch only the first occurrence, the 2nd one is different.
+  pop @L if @L == 2 and vec($_, $L[0] - 6, 8) == 0xf6 and
+                        vec($_, $L[1] - 6, 8) == 0xf6;
   if (@L == 1) {
     if (vec($_, $L[0], 8) == 4) {  # need to patch
       print "info: patching at offset $L[0]\n";
       die "error: cannot open file for writing: $fn\n" if !open F, "+<", $fn;
       die if !sysseek F, $L[0], 0;
-      # We patch only the first occurrence, the 2nd one is different.
       die if !syswrite F, "\0";
       print "info: patching OK, no need to restart gnome-terminal\n";
     } else {

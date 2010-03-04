@@ -2,7 +2,7 @@
 """Stand-alone lircd implementation for the Hama MCE remote control on Linux.
 
 by pts@fazekas.hu at Sun Oct 18 17:08:26 CEST 2009
---- Thu Oct 22 23:43:39 CEST 2009
+--- Thu Mar  4 20:48:36 CET 2010
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -93,6 +93,22 @@ import stat
 import struct
 import sys
 import time
+
+INPUT_EVENT_SIZE = len(struct.pack('l', 0)) * 2 + 8
+"""16 for i386, 24 for amd64.
+
+struct input_event {  // defined in /usr/include/linux/input.h
+  struct timeval {
+    long tv_sec;   // int32 or int64
+    long tv_usec;  // int32 or int64
+  } time;
+  uint16 type;
+  uint16 code;
+  int32 value;
+};
+"""
+
+assert INPUT_EVENT_SIZE in (16, 24)
 
 # !! use /proc/bus/input/devices instead
 def DetectHamaMce():
@@ -258,18 +274,18 @@ class HamaMceInput(object):
         [self.keyboard_fd, self.mouse_fd], (), (), 0)[0]
     if self.keyboard_fd in readable_fds:
       try:
-        self.keyboard_buf = os.read(self.keyboard_fd, 24) or ''
+        self.keyboard_buf = os.read(self.keyboard_fd, INPUT_EVENT_SIZE) or ''
       except OSError:
         self.keyboard_buf = ''
-      if len(self.keyboard_buf) != 24:
+      if len(self.keyboard_buf) != INPUT_EVENT_SIZE:
         self.Close()
         return False
     if self.mouse_fd in readable_fds:
       try:
-        self.mouse_buf = os.read(self.mouse_fd, 24) or ''
+        self.mouse_buf = os.read(self.mouse_fd, INPUT_EVENT_SIZE) or ''
       except OSError:
         self.mouse_buf = ''
-      if len(self.mouse_buf) != 24:
+      if len(self.mouse_buf) != INPUT_EVENT_SIZE:
         self.Close()
         return False
     return True
@@ -366,12 +382,13 @@ class HamaMceInput(object):
         if self.keyboard_fd in readable_fds:
           do_print_disconnect = False
           try:
-            self.keyboard_buf = os.read(self.keyboard_fd, 24) or ''
+            self.keyboard_buf = (os.read(self.keyboard_fd, INPUT_EVENT_SIZE)
+                                 or '')
             do_print_disconnect = True
           except OSError, e:
             self.keyboard_buf = ''
             print >>sys.stderr, 'error: read error from keyboard: %s' % e
-          if len(self.keyboard_buf) != 24:
+          if len(self.keyboard_buf) != INPUT_EVENT_SIZE:
             if not self.keyboard_buf:
               print >>sys.stderr, 'info: Hame MCE disconnected'
             self.Close()
@@ -379,22 +396,31 @@ class HamaMceInput(object):
         if self.mouse_fd in readable_fds:
           do_print_disconnect = False
           try:
-            self.mouse_buf = os.read(self.mouse_fd, 24) or ''
+            self.mouse_buf = os.read(self.mouse_fd, INPUT_EVENT_SIZE) or ''
             do_print_disconnect = True
           except OSError, e:
             self.mouse_buf = ''
             print >>sys.stderr, 'error: read error from mouse: %s' % e
-          if len(self.mouse_buf) != 24:
+          if len(self.mouse_buf) != INPUT_EVENT_SIZE:
             if not self.keyboard_buf:
               print >>sys.stderr, 'info: Hame MCE disconnected'
             self.Close()
             return None
 
+  @classmethod
+  def ParseEvent(cls, buf):
+    if len(buf) == 16:
+      tv_sec, tv_usec, etype, code, value = struct.unpack('=LLHHl', buf)
+    elif len(buf) == 24:
+      # This assumes sizeof(long) == 8, which is true if
+      # len(buf) == INPUT_EVENT_SIZE.
+      tv_sec, tv_usec = struct.unpack('@LL', buf[:16])
+      etype, code, value = struct.unpack('=HHl', buf[16:])
+    return tv_sec, tv_usec, etype, code, value
+
   def FilterKeyboardEvent(self, buf):
     """Return an event string or None to ignore."""
-    # struct input_event defined in /usr/include/linux/input.h
-    time0, time1, time2, time3, etype, code, value = struct.unpack(
-        '=LLLLHHL', buf)
+    tv_sec, tv_usec, etype, code, value = self.ParseEvent(buf)
     #print ('K', etype, code, value)
     # Some keypresses generate more events with etype=4, code=4 and
     # value containing the keycode, without information about the press or
@@ -460,28 +486,25 @@ class HamaMceInput(object):
 
   def FilterMouseEvent(self, buf):
     """Return an event string or None to ignore."""
-    time0, time1, time2, time3, etype, code, value = struct.unpack(
-        '=LLLLHHL', buf)
-    #print ('M', etype, code, value)
-    value_signed, = struct.unpack('=l', buf[20:])
+    tv_sec, tv_usec, etype, code, value = self.ParseEvent(buf)
     # Some keypresses generate more events with etype=4, code=4 and
     # value containing the keycode, without information about the press or
     # release. But we can ignore those.
-    if etype == 2 and code == 0 and -15 <= value_signed <= 15:
-      # `value_signed' starts from 2, and increases (4, 6, 8, 10, 12, 14) as
+    if etype == 2 and code == 0 and -15 <= value <= 15:
+      # `value' starts from 2, and increases (4, 6, 8, 10, 12, 14) as
       # the button is kept pressed.
-      if value_signed > 0:
+      if value > 0:
         # !! events seem to be repeated 4 times -- keep fewer
-        return 'mouse-right-%d' % value_signed
-      elif value_signed < 0:
-        return 'mouse-left-%d' % -value_signed
+        return 'mouse-right-%d' % value
+      elif value < 0:
+        return 'mouse-left-%d' % -value
       else:
         return None
-    elif etype == 2 and code == 1 and -15 <= value_signed <= 15:
-      if value_signed > 0:
-        return 'mouse-down-%d' % value_signed
-      elif value_signed < 0:
-        return 'mouse-up-%d' % -value_signed
+    elif etype == 2 and code == 1 and -15 <= value <= 15:
+      if value > 0:
+        return 'mouse-down-%d' % value
+      elif value < 0:
+        return 'mouse-up-%d' % -value
       else:
         return None
     elif etype == 1:

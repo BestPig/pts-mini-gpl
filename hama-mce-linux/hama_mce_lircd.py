@@ -101,7 +101,9 @@ import socket
 import stat
 import struct
 import sys
+import syslog
 import time
+import traceback
 
 INPUT_EVENT_SIZE = len(struct.pack('l', 0)) * 2 + 8
 """16 for i386, 24 for amd64.
@@ -119,24 +121,80 @@ struct input_event {  // defined in /usr/include/linux/input.h
 
 assert INPUT_EVENT_SIZE in (16, 24)
 
-is_verbose = True
+# --- Logging
+
+is_log_verbose = True
+
+is_syslog = False
+
+
+def StartLoggingToSyslog():
+  global is_syslog
+  if is_syslog:
+    return
+  LogInfo('opening syslog, logging further messages there')
+  sys.stderr.flush()
+  is_syslog = True
+  syslog.openlog('hama_mce_lircd', syslog.LOG_PID, syslog.LOG_DAEMON)
+  syslog.syslog(syslog.LOG_INFO, 'syslog opened')
+
 
 def LogInfo(msg):
-  now = '%.2f' % time.time()
-  sys.stderr.write('info: [%s] %s\n' % (now, msg.rstrip('\n')))
-  sys.stderr.flush()
-
-def LogMaybeInfo(msg):
-  if is_verbose:
+  msg = str(msg).rstrip('\n')
+  if is_syslog:
+    syslog.syslog(syslog.LOG_NOTICE, msg)
+  else:
     now = '%.2f' % time.time()
-    sys.stderr.write('xinfo: [%s] %s\n' % (now, msg.rstrip('\n')))
+    sys.stderr.write('info: [%s] %s\n' % (now, msg))
     sys.stderr.flush()
 
-def LogError(msg):
-  now = '%.2f' % time.time()
-  sys.stderr.write('error: [%s] %s\n' % (now, msg.rstrip('\n')))
-  sys.stderr.flush()
 
+def LogMaybeInfo(msg):
+  if is_log_verbose:
+    msg = str(msg).rstrip('\n')
+    if is_syslog:
+      syslog.syslog(syslog.LOG_INFO, 'xinfo: ' + msg)
+    else:
+      now = '%.2f' % time.time()
+      sys.stderr.write('xinfo: [%s] %s\n' % (now, msg))
+      sys.stderr.flush()
+
+
+def LogError(msg):
+  msg = str(msg).rstrip('\n')
+  if is_syslog:
+    syslog.syslog(syslog.LOG_ERROR, 'error: ' + msg)
+  else:
+    now = '%.2f' % time.time()
+    sys.stderr.write('error: [%s] %s\n' % (now, msg))
+    sys.stderr.flush()
+
+# ---
+
+def Daemonize(do_close_stderr):
+  """Fork a child in a new process group, exit from parent, close fds."""
+  sys.stdout.flush()
+  sys.stderr.flush()
+  pid = os.fork()
+  if pid:  # Parent.
+    LogInfo('forked child PID %d' % pid)
+    os._exit(0)
+
+  fd = os.open('/dev/null', os.O_RDONLY)
+  if fd != 0:
+    os.dup2(fd, 0)
+    os.close(fd)
+
+  fd = os.open('/dev/null', os.O_WRONLY)
+  if fd != 1:
+    os.dup2(fd, 1)
+    os.close(fd)
+
+  if do_close_stderr:
+    fd = os.open('/dev/null', os.O_WRONLY)
+    if fd != 2:
+      os.dup2(fd, 2)
+      os.close(fd)
 
 # !! use /proc/bus/input/devices instead
 def DetectHamaMce():
@@ -570,7 +628,6 @@ class HamaMceInput(object):
       # `value' starts from 2 (occasionally 1 for diagonal movements), and
       # increases (4, 6, 8, 10, # 12, 14) as the button is kept pressed.
       if value > 0:
-        # !! events seem to be repeated 4 times -- keep fewer
         return 'mouse-right-%d' % value
       elif value < 0:
         return 'mouse-left-%d' % -value
@@ -632,6 +689,7 @@ class LineSource(object):
     # TODO(pts): Don't use string += for speed.
     line = ''
     while True:
+      # SUXX: Input/output error from child when not current process group.
       c = os.read(self.fd, 1)
       if not c:
         if line:
@@ -875,7 +933,7 @@ hmi_source = HamaMceSource(
     hmi, prefix=PREFIX, lirc_remote_name=LIRC_REMOTE_NAME)
 
 def DetectSources(sources, is_verbose):
-  had_fds = hmi.keyboard_fd is not None and hmi.mouse_fds is not None
+  had_fds = hmi.keyboard_fd is not None and hmi.mouse_fd is not None
   was_alive = hmi.IsAlive()
   if hmi.keyboard_fd in sources and hmi.mouse_fd in sources and was_alive:
     return ()
@@ -943,17 +1001,48 @@ def main(argv):
             break  # Unrecoverable error, closed.
           print '%s %s' % (int(time.time()), event)
     else:
-      if argv[1] == '--lock':
-        del argv[1]
-        lock_filename = argv[1] + '.lock'
+      do_lock = False
+      do_syslog = False
+      do_non_verbose = False
+      do_daemon = False
+      i = 1
+      while i < len(argv):
+        if argv[i] == '--lock':
+          do_lock = True
+        elif argv[i] == '--syslog':
+          do_syslog = True
+        elif argv[i] == '--non-verbose':
+          do_non_verbose = True
+        elif argv[i] == '--daemon':
+          do_daemon = True
+        elif argv[i] == '--':
+          i += 1
+          break
+        elif argv[i] == '-' or not argv[i].startswith('-'):
+          break
+        else:
+          LogError('unknown flag: ' + str(argv[i]))
+          return 1
+        i += 1
+      if i != len(argv) - 1:
+        LogError('expected single filename argument')
+        return 1
+      global is_log_verbose
+      is_log_verbose = not do_non_verbose
+      if do_lock:
+        lock_filename = argv[i] + '.lock'
         lock_fd = TryLock(lock_filename=lock_filename)
         if lock_fd is False:
           LogError('cannot lock %r, maybe another server is running' %
                    lock_filename)
-          return 2
+          return 33
+      if do_daemon:
+        Daemonize(do_close_stderr=do_syslog)
+      if do_syslog:
+        StartLoggingToSyslog()
       LogMaybeInfo('you may type synthetic lircd events on stdin')
       RunBroadcastServer(
-          socket_filename=argv[1],  # '/dev/lircd',
+          socket_filename=argv[i],  # '/dev/lircd',
           orig_sources={0: LineSource(0, prefix=PREFIX)},  # sys.stdin
           detect_sources_callback=DetectSources)
   except KeyboardInterrupt:
@@ -962,4 +1051,12 @@ def main(argv):
     LogInfo('got Ctrl-<C> (SIGINT), aborted')
 
 if __name__ == '__main__':
-  sys.exit(main(sys.argv) or 0)
+  try:
+    sys.exit(main(sys.argv) or 0)
+  except SystemExit:
+    raise
+  except:
+    exc_info = sys.exc_info()
+    LogError('uncaught exception %s.%s, exiting\n%s' %
+             (exc_info[0].__module__, exc_info[0].__name__,
+              ''.join(traceback.format_exception(*exc_info))))

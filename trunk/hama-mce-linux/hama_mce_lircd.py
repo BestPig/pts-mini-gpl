@@ -110,6 +110,25 @@ struct input_event {  // defined in /usr/include/linux/input.h
 
 assert INPUT_EVENT_SIZE in (16, 24)
 
+is_verbose = True
+
+def LogInfo(msg):
+  now = '%.2f' % time.time()
+  sys.stderr.write('info: [%s] %s\n' % (now, msg.rstrip('\n')))
+  sys.stderr.flush()
+
+def LogMaybeInfo(msg):
+  if is_verbose:
+    now = '%.2f' % time.time()
+    sys.stderr.write('xinfo: [%s] %s\n' % (now, msg.rstrip('\n')))
+    sys.stderr.flush()
+
+def LogError(msg):
+  now = '%.2f' % time.time()
+  sys.stderr.write('error: [%s] %s\n' % (now, msg.rstrip('\n')))
+  sys.stderr.flush()
+
+
 # !! use /proc/bus/input/devices instead
 def DetectHamaMce():
   """Detect the Hama MCE remote and return the USB HID input event devices.
@@ -320,13 +339,13 @@ class HamaMceInput(object):
       # `Permission denied' or `No such file or directory'.
       if e.errno not in (errno.EACCES, errno.ENOENT):
         raise
-      print >>sys.stderr, 'info: Hame MCE found, creating devices'
+      LogInfo('Hama MCE dongle found, creating devices')
       # TODO(pts): Make this return instantly if sudoers not set up.
       os.system(
           'sudo -S /usr/local/sbin/create_hama_mce_devices.py </dev/null')
       keyboard_fd, mouse_fd = self.AttemptOpen(keyboard_num, mouse_num)
-    print >>sys.stderr, 'info: opened /dev/input/event{%d,%d}' % (
-        keyboard_num, mouse_num)
+    LogInfo('opened /dev/input/event{%d,%d}' %
+            (keyboard_num, mouse_num))
 
     try:
       # EVIOCGRAB gives the filehandle exclusive access to the device events
@@ -342,7 +361,7 @@ class HamaMceInput(object):
 
     self.keyboard_fd = keyboard_fd
     self.mouse_fd = mouse_fd
-    print >>sys.stderr, 'info: open OK'
+    LogInfo('open OK')
 
   @classmethod
   def AttemptOpen(cls, keyboard_num, mouse_num):
@@ -394,10 +413,11 @@ class HamaMceInput(object):
             do_print_disconnect = True
           except OSError, e:
             self.keyboard_buf = ''
-            print >>sys.stderr, 'error: read error from keyboard: %s' % e
+            if e.errno != errno.ENODEV:
+              LogError('read error from keyboard: %s' % e)
           if len(self.keyboard_buf) != INPUT_EVENT_SIZE:
             if not self.keyboard_buf:
-              print >>sys.stderr, 'info: Hame MCE disconnected'
+              LogInfo('Hama MCE dongle disconnected')
             self.Close()
             return None
         if self.mouse_fd in readable_fds:
@@ -407,10 +427,11 @@ class HamaMceInput(object):
             do_print_disconnect = True
           except OSError, e:
             self.mouse_buf = ''
-            print >>sys.stderr, 'error: read error from mouse: %s' % e
+            if e.errno != errno.ENODEV:
+              LogError('read error from mouse: %s' % e)
           if len(self.mouse_buf) != INPUT_EVENT_SIZE:
             if not self.keyboard_buf:
-              print >>sys.stderr, 'info: Hame MCE disconnected'
+              LogInfo('Hama MCE dongle disconnected')
             self.Close()
             return None
 
@@ -634,7 +655,7 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
       pass
     old_umask = os.umask(0)
     os.umask(0111)
-    print >>sys.stderr, 'info: listening on: %s' % socket_filename
+    LogInfo('listening on: %s' % socket_filename)
     try:
       s.bind(socket_filename)
     except socket.error, e:
@@ -644,9 +665,8 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
         extra = ' -- try to fix the file permissions'
       else:
         extra = ''
-      print >>sys.stderr, (
-          'error: could not bind Unix domain server socket to %s: %s%s' %
-          (socket_filename, e, extra))
+      LogError('could not bind Unix domain server socket to %s: %s%s' %
+               (socket_filename, e, extra))
       # TODO(pts): Raise better exception here.
       raise SystemExit(1)
     os.umask(old_umask)
@@ -681,13 +701,12 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
     fds = set(fd_to_socket)
     fds.difference_update(server_fds)  # Doesn't fail if missing from fds.
     fds.difference_update(source_fds)
-    print >>sys.stderr, 'info: [%d] broadcasting to %d: %r' % (
-        int(time.time()), len(fds), msg)
+    LogMaybeInfo('broadcasting to %d: %r' %
+                 (len(fds), msg))
     writable_fds = select.select((), fds, (), 0)[1]
     non_writable_fds = sorted(fds.difference(writable_fds))
     if non_writable_fds:
-      print >>sys.stderr, (
-          'info: skipping broadcast to busy fds %r' % non_writable_fds)
+      LogMaybeInfo('skipping broadcast to busy fds %r' % non_writable_fds)
     for fd in writable_fds:
       # TODO(pts): Use non-blocking I/O to verify if it's still wriable.
       i = 0
@@ -696,11 +715,11 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
           n = os.write(fd, msg[i:])
         except OSError, e:
           if e.errno != errno.EPIPE:
-            print >>sys.stderr, 'info: %s writing to fd=%d, closing it' % (e, fd)
+            LogMaybeInfo('%s writing to fd=%d, closing it' % (e, fd))
             # Example: errno.ECONNRESET
             Close(fd)
             raise
-          print >>sys.stderr, 'info: broken pipe to fd=%d' % fd
+          LogMaybeInfo('broken pipe to fd=%d' % fd)
           break
         assert n
         i += n
@@ -744,11 +763,13 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
 
   # Timestamp of the next call to detect_sources_callback(sources)
   next_detect = time.time()
+  is_detect_verbose = True
 
   while True:
     if next_detect is not None and next_detect <= time.time():
       next_detect = None
-      actions = detect_sources_callback(sources)
+      actions = detect_sources_callback(sources, is_detect_verbose)
+      is_detect_verbose = False
       for action in actions:
         if action[0] == 'add':
           AddSource(fd=action[1], source=action[2])
@@ -767,7 +788,7 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
       timeout = next_detect - now
       if timeout < 0:
         timeout = 0
-      print >>sys.stderr, 'info: next detect in %.2f seconds' % timeout
+      LogMaybeInfo('next detect in %.2f seconds' % timeout)
     # TODO(pts): shrink fd_to_socket, otherwise we might get:
     # select.error: (9, 'Bad file descriptor')
     readable_fds = select.select(fd_to_socket, (), (), timeout)[0]
@@ -776,14 +797,14 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
       if fd in server_fds:
         conn, unused_addr = s.accept()
         fd_to_socket[conn.fileno()] = conn
-        print >>sys.stderr, 'info: client connected on fd=%s' % conn.fileno()
+        LogMaybeInfo('client connected on fd=%s' % conn.fileno())
         conn = None
       elif fd in source_fds:
         msg = s.ReadMessage()
         if msg is None:
           pass
         elif not msg:
-          print >>sys.stderr, 'info: source disconnected fd=%s' % fd
+          LogMaybeInfo('source disconnected fd=%s' % fd)
           DeleteSource(fd)
           next_detect = now  # force early detect
         else:
@@ -792,9 +813,9 @@ def RunBroadcastServer(socket_filename, orig_sources, detect_sources_callback):
         # TODO(pts): Activate non-blocking read.
         data = os.read(fd, 4096)
         if data:
-          print >>sys.stderr, 'info: %d bytes ignored on fd=%s' % (len(data), fd)
+          LogMaybeInfo('%d bytes ignored on fd=%s' % (len(data), fd))
         else:
-          print >>sys.stderr, 'info: client disconnected on fd=%s' % fd
+          LogMaybeInfo('client disconnected on fd=%s' % fd)
           Close(fd)
 
 PREFIX = '0000000000000000 00 '
@@ -844,7 +865,7 @@ hmi = HamaMceInput()
 hmi_source = HamaMceSource(
     hmi, prefix=PREFIX, lirc_remote_name=LIRC_REMOTE_NAME)
 
-def DetectSources(sources):
+def DetectSources(sources, is_verbose):
   had_fds = hmi.keyboard_fd is not None and hmi.mouse_fds is not None
   was_alive = hmi.IsAlive()
   if hmi.keyboard_fd in sources and hmi.mouse_fd in sources and was_alive:
@@ -855,31 +876,31 @@ def DetectSources(sources):
     if sources[fd] == hmi_source:
       actions.append(('del', fd))
   if had_fds:
-    print >>sys.stderr, (
-        'error: [%d] Hama MCE dongle disconnected, please reconnect it' %
-        int(time.time()))
+    LogError('Hama MCE dongle disconnected, please reconnect it')
   try:
     hmi.Open()
   except HamaMceNotFound:
     pass
   if hmi.IsAlive():
-    print >>sys.stderr, 'info: [%d] Hama MCE dongle detected' % int(time.time())
+    LogInfo('Hama MCE dongle detected')
     actions.append(('add', hmi.keyboard_fd, hmi_source))
     actions.append(('add', hmi.mouse_fd, hmi_source))
   else:
     if not had_fds:
-      print >>sys.stderr, (
-          'error: [%d] Hama MCE dongle not detected, please connect it' %
-          int(time.time()))
+      msg = 'Hama MCE dongle not detected, please connect it'
+      if is_verbose:
+        LogInfo(msg)
+      else:
+        LogMaybeInfo(msg)
     hmi.Close()
     actions.append(('next', time.time() + 3))
   return actions
 
 
 def main(argv):
-  print >>sys.stderr, 'info: This is the Hama MCE reader.'
+  LogInfo('This is the Hama MCE reader.')
   if not sys.platform.lower().startswith('linux'):
-    print >>sys.stderr, 'error: a Linux system is needed'   
+    LogError('a Linux system is needed')
     # TODO(pts): Check for kernel 2.6 or newer, for /sys (sysfs)
   try:
     if len(sys.argv) < 2:
@@ -893,25 +914,25 @@ def main(argv):
             if hmi.IsAlive():
               break
             sleep_secs = 3
-            print >>sys.stderr, (
-                'info: [%d] Hama MCE dongle not found, please connect it '
-                '(sleep %d)' % (int(time.time()), sleep_secs))
+            LogInfo('Hama MCE dongle not found, please connect it '
+                    '(sleep %d)' % sleep_secs)
             time.sleep(sleep_secs)
-        print >>sys.stderr, 'info: use the remote or press Ctrl-<C> to exit'
+        LogMaybeInfo('use the remote or press Ctrl-<C> to exit')
         while True:
           event = hmi.ReadEvent()
           if event is None:
             break  # Unrecoverable error, closed.
           print '%s %s' % (int(time.time()), event)
     else:
-      print >>sys.stderr, 'info: you may type synthetic lircd events on stdin'
+      LogMaybeInfo('you may type synthetic lircd events on stdin')
       RunBroadcastServer(
           socket_filename=argv[1],  # '/dev/lircd',
           orig_sources={0: LineSource(0, prefix=PREFIX)},  # sys.stdin
           detect_sources_callback=DetectSources)
   except KeyboardInterrupt:
     # TODO(pts): Defer this until safe to handle.
-    print >>sys.stderr, '\ninfo: got Ctrl-<C>, aborted'
+    print >>sys.stderr, ''
+    LogInfo('got Ctrl-<C> (SIGINT), aborted')
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv) or 0)

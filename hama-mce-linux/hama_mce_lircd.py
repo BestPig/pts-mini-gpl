@@ -57,6 +57,15 @@ Installation and usage instructions:
    $ mplayer -lircconf /dev/null /dev/null
    (Should not display: Error parsing option... or similar error)
 
+8. Run ircat(1) in a new terminal window:
+
+   $ ircat --config=lircrc mplayer
+
+   and press the stop button (full square at the left side of row 6 from the
+   top) on the Hama MCE remote. Watch irexec(1) display `quit' (as
+   configured in lircrc). In the meanwhile, watch the output of
+   hama_mce_lircd.py as well. You can abort irexec(1) by pressing Ctrl-<C>.
+
 8. Copy or append the bundled lircrc to $HOME/.lircrc . (Make sure you make a
    backup of your original $HOME/.lircrc if necessary.)
 
@@ -897,6 +906,16 @@ def DetectSources(sources, is_verbose):
   return actions
 
 
+def TryLock(lock_filename):
+  lock_fd = os.open(lock_filename, os.O_RDWR | os.O_CREAT, 0600)
+  try:
+    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+  except IOError, e:
+    if e.errno == errno.EAGAIN:
+      return False
+    raise
+  return lock_fd
+
 def main(argv):
   LogInfo('This is the Hama MCE reader.')
   if not sys.platform.lower().startswith('linux'):
@@ -924,6 +943,14 @@ def main(argv):
             break  # Unrecoverable error, closed.
           print '%s %s' % (int(time.time()), event)
     else:
+      if argv[1] == '--lock':
+        del argv[1]
+        lock_filename = argv[1] + '.lock'
+        lock_fd = TryLock(lock_filename=lock_filename)
+        if lock_fd is False:
+          LogError('cannot lock %r, maybe another server is running' %
+                   lock_filename)
+          return 2
       LogMaybeInfo('you may type synthetic lircd events on stdin')
       RunBroadcastServer(
           socket_filename=argv[1],  # '/dev/lircd',

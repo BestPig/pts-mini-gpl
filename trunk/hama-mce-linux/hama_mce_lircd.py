@@ -99,8 +99,8 @@ INPUT_EVENT_SIZE = len(struct.pack('l', 0)) * 2 + 8
 
 struct input_event {  // defined in /usr/include/linux/input.h
   struct timeval {
-    long tv_sec;   // int32 or int64
-    long tv_usec;  // int32 or int64
+    long tv_sec;   // int32 or int64; seconds
+    long tv_usec;  // int32 or int64; microseconds
   } time;
   uint16 type;
   uint16 code;
@@ -174,7 +174,8 @@ class HamaMceInput(object):
 
   __slots__ = ['keyboard_fd', 'mouse_fd', 'keyboard_buf', 'mouse_buf',
                'has_shift', 'do_ignore_release_digit5', 'do_release_start',
-               'has_mod42', 'do_release_screenrow']
+               'has_mod42', 'do_release_screenrow',
+               'pending_mouse_x', 'pending_mouse_y']
 
   EVIOCGRAB = 1074021776
 
@@ -239,6 +240,10 @@ class HamaMceInput(object):
     """Creates a HamaMceInput without opening it (i.e. doing I/O)."""
     self.keyboard_fd = None
     self.mouse_fd = None
+    # [event_counter, delta_movement, first_timestamp, last_timestamp,
+    #  before_last_timestamp]
+    self.pending_mouse_x = [0, 0, 0.0, 0.0, 0.0]
+    self.pending_mouse_y = [0, 0, 0.0, 0.0, 0.0]
     self.Close()
 
   def __del__(self):
@@ -260,6 +265,8 @@ class HamaMceInput(object):
     # (and other keys).
     self.do_release_start = False
     self.do_release_screenrow = False
+    self.pending_mouse_x[0] = 0
+    self.pending_mouse_y[0] = 0
 
   def IsAlive(self):
     if self.keyboard_fd is None:
@@ -484,6 +491,40 @@ class HamaMceInput(object):
     else:
       return 'keyboard-other-%d-%d-0x%08x' % (etype, code, value)
 
+  @classmethod
+  def ShouldIgnoreMouseEvent(cls, pending, other_pending, now, value):
+    if abs(value) > 1:
+      pending[4] = pending[3]
+      pending[3] = now
+    else:
+      pending[3] = pending[4] = 0.0
+    # The Hama MCE sends the same mouse movement event 4 times, with slightly
+    # increasing timestamps. Here we ignore all but the first instance.
+    if (pending[0] in (1, 2, 3) and pending[1] == value and
+        now - pending[2] <= 2.0):
+      pending[0] += 1
+      return True
+    pending[0] = 1
+    pending[1] = value
+    pending[2] = now
+
+    # The Hama MCE is not so reliable on reporting diagonal movements, e.g.
+    # when moving the mouse down, it sometimes reports a little left or
+    # right movement as well. So we just ignore diagonal movements here,
+    # whose minor direction always has half of the absolute value as the
+    # main direction.
+
+    if (value in (1, -1) or
+        (now - other_pending[3] <= 0.5 and
+         abs(value) < abs(other_pending[1])) or
+        (value in (2, -2) and
+         other_pending[1] in (2, -2) and
+         now - other_pending[4] <= 0.5 and
+         now - pending[4] >= 1.0)):
+      return True
+
+    return False
+
   def FilterMouseEvent(self, buf):
     """Return an event string or None to ignore."""
     tv_sec, tv_usec, etype, code, value = self.ParseEvent(buf)
@@ -491,8 +532,13 @@ class HamaMceInput(object):
     # value containing the keycode, without information about the press or
     # release. But we can ignore those.
     if etype == 2 and code == 0 and -15 <= value <= 15:
-      # `value' starts from 2, and increases (4, 6, 8, 10, 12, 14) as
-      # the button is kept pressed.
+      if self.ShouldIgnoreMouseEvent(pending=self.pending_mouse_x,
+                                     other_pending=self.pending_mouse_y,
+                                     now=tv_sec + tv_usec / 1000000.0,
+                                     value=value):
+        return None
+      # `value' starts from 2 (occasionally 1 for diagonal movements), and
+      # increases (4, 6, 8, 10, # 12, 14) as the button is kept pressed.
       if value > 0:
         # !! events seem to be repeated 4 times -- keep fewer
         return 'mouse-right-%d' % value
@@ -501,6 +547,11 @@ class HamaMceInput(object):
       else:
         return None
     elif etype == 2 and code == 1 and -15 <= value <= 15:
+      if self.ShouldIgnoreMouseEvent(pending=self.pending_mouse_y,
+                                     other_pending=self.pending_mouse_x,
+                                     now=tv_sec + tv_usec / 1000000.0,
+                                     value=value):
+        return None
       if value > 0:
         return 'mouse-down-%d' % value
       elif value < 0:

@@ -1,10 +1,25 @@
 #
 # $HOME/.lircrc for hama_mce_lircd.py
 # by pts@fazekas.hu at Thu Oct 22 23:50:22 CEST 2009
+# -- Thu Mar  4 22:06:09 CET 2010
 #
 # * `config =' values taken from /etc/mplayer/input.conf
 # * read more about mplayer's lirc configuration on
 #   http://www.mplayerhq.hu/DOCS/HTML/en/control.html
+
+begin
+  remote = hama-mce
+  button = channelplus
+  prog   = irexec
+  config = killall -USR1 qiv
+end
+
+begin
+  remote = hama-mce
+  button = channelminus
+  prog   = irexec
+  config = killall -USR2 qiv
+end
 
 begin
   remote = hama-mce
@@ -162,6 +177,104 @@ end
 
 begin
   remote = hama-mce
+  button = mouse-up-2
+  prog   = mplayer
+  config = seek +20
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-4
+  prog   = mplayer
+  config = seek +40
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-6
+  prog   = mplayer
+  config = seek +60
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-8
+  prog   = mplayer
+  config = seek +80
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-10
+  prog   = mplayer
+  config = seek +100
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-12
+  prog   = mplayer
+  config = seek +120
+end
+
+begin
+  remote = hama-mce
+  button = mouse-up-14
+  prog   = mplayer
+  config = seek +140
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-2
+  prog   = mplayer
+  config = seek -20
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-4
+  prog   = mplayer
+  config = seek -40
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-6
+  prog   = mplayer
+  config = seek -60
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-8
+  prog   = mplayer
+  config = seek -80
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-10
+  prog   = mplayer
+  config = seek -100
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-12
+  prog   = mplayer
+  config = seek -120
+end
+
+begin
+  remote = hama-mce
+  button = mouse-down-14
+  prog   = mplayer
+  config = seek -140
+end
+
+begin
+  remote = hama-mce
   button = hashmark
   prog   = mplayer
   config = switch_audio
@@ -200,4 +313,11 @@ begin
   button = fullforward
   prog   = mplayer
   config = pt_step 1 1
+end
+
+begin
+  remote = hama-mce
+  button = mouse-rightbutton
+  prog   = mplayer
+  config = osd
 end

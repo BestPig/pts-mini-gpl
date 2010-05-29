@@ -15,6 +15,7 @@ class Semaphore(object):
     self._value = value
 
   def acquire(self, blocking=True):
+    """Semaphore P primitive."""
     self._lock.acquire()
     while not self._value:
       if not blocking:
@@ -32,6 +33,7 @@ class Semaphore(object):
     self._lock.release()
 
   def release(self):
+    """Semaphore V primitive."""
     self._lock.acquire()
     self._value += 1
     assert self._lock.locked(), 'notify() of un-acquire()d lock'

@@ -271,6 +271,10 @@ END
   fi
 fi
 
+# This doesn't work on Ubuntu Lucid, we get many dmesg messages:
+# usb 1-3.3.1: usbfs: interface 0 claimed by usblp while 'usb' sets config #1
+#DeviceURI usb://HP/LaserJet%201018
+
 set -ex
 "$CUPSYS" stop
 perl -pi -0777 -e '
@@ -281,7 +285,7 @@ cat >>/etc/cups/printers.conf <<'END'
 <DefaultPrinter HP_LaserJet_1018_pts>
 Info Hewlett-Packard HP LaserJet 1018
 MakeModel HP LaserJet 1018 Foomatic/foo2zjs (recommended)
-DeviceURI usb://HP/LaserJet%201018
+DeviceURI parallel:///dev/usb/lp0
 State Idle
 StateTime 1276502574
 Type 8425476

@@ -24,6 +24,7 @@
 #                if (event->group &&
 #                                (terminal->pvt->modifiers & GDK_CONTROL_MASK)) 
 #                        keyval = vte_translate_national_ctrlkeys(event);
+#                keychar = gdk_keyval_to_unicode(keyval);
 #
 # Below we replace GDK_CONTROL_MASK (== 4) by 0, so the condition is
 # always false. The relevant disassembly dump is:
@@ -38,7 +39,7 @@
 # 25cd8:       f6 80 4c 09 00 00 04    testb  $0x0,0x94c(%eax)
 # 25d0d:       f6 81 4c 09 00 00 04    testb  $0x4,0x94c(%ecx)
 #
-# !! i386 Ubuntu Karmic:
+# i386 Ubuntu Karmic (similar for Lucid):
 # 2b7b0:       8b 80 84 09 00 00       mov    0x984(%eax),%eax
 # 2b7b6:       89 85 7c ff ff ff       mov    %eax,-0x84(%ebp)
 # ...
@@ -46,11 +47,18 @@
 # 2bad9:	f6 85 7c ff ff ff 04 	testb  $0x4,-0x84(%ebp)
 # 2bcbe:	f6 85 7c ff ff ff 04 	testb  $0x4,-0x84(%ebp)  # to fix
 # 2bcf5:	f6 85 7c ff ff ff 04 	testb  $0x4,-0x84(%ebp)
-# perl -e 'my$o=0x2bcbe;die unless open F, "+<", "/usr/lib/libvte.so.9"; die unless sysseek F, $o, 0; die unless 7 == sysread(F, $_, 7); print unpack("H*", $_)."\n"; die unless sysseek F, $o+6, 0; die unless 1 == syswrite(F, "\0")'
-# 2bcb8:       80 79 22 00             cmpb   $0x0,0x22(%ecx)
-# 2bcbc:       74 0d                   je     2bccb <vte_terminal_copy_primary
-# 2bcbe:       f6 85 7c ff ff ff 04    testb  $0x4,-0x84(%ebp)
-# 2bcc5:       0f 85 ba 00 00 00       jne    2bd85 <vte_terminal_copy_primary
+#
+# x86_64 Ubuntu Lucid:
+# 30402:       e9 d6 fa ff ff          jmpq   2fedd <vte_terminal_set_color_bold+0x39bd>
+# 30407:       80 7d 32 00             cmpb   $0x0,0x32(%rbp)
+# 3040b:       74 11                   je     3041e <vte_terminal_set_color_bold+0x3efe>
+# 3040d:       41 f6 c5 04             test   $0x4,%r13b  # to fix
+# 30411:       0f 1f 80 00 00 00 00    nopl   0x0(%rax)
+# 30418:       0f 85 ee 03 00 00       jne    3080c <vte_terminal_set_color_bold+0x42ec>
+                  
+#
+# To find the spot to patch, grep for gdk_keyval_to_unicode in the output of
+# `objdump -d /usr/lib/libvte.so.9'.
 
 exec perl -we '
   use integer;
@@ -62,8 +70,10 @@ exec perl -we '
   my @L;
   while (/\xf6[\x80-\x8f].[\x09-\x0a]\0\0[\x00\x04]
          |\x80[\x78-\x7f].\0\x74.\xf6\x85.\xff\xff\xff[\x00\x04]
+         |\x80\x7d\x32\x00\x74\x11\x41\xf6\xc5[\x00\x04]
+          (?=(?:\x0f\x1f\x80\0\0\0\0)?\x0f\x85)
          /sgx) {
-    push @L, pos($_) - 1;
+    push @L, pos($_) - 1;  # offset of the last [\x00\x04]
   }
   # We patch only the first occurrence, the 2nd one is different.
   pop @L if @L == 2 and vec($_, $L[0] - 6, 8) == 0xf6 and

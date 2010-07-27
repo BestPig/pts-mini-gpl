@@ -55,7 +55,6 @@
 # 3040d:       41 f6 c5 04             test   $0x4,%r13b  # to fix
 # 30411:       0f 1f 80 00 00 00 00    nopl   0x0(%rax)
 # 30418:       0f 85 ee 03 00 00       jne    3080c <vte_terminal_set_color_bold+0x42ec>
-                  
 #
 # To find the spot to patch, grep for gdk_keyval_to_unicode in the output of
 # `objdump -d /usr/lib/libvte.so.9'.

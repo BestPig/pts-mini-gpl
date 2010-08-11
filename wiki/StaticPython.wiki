@@ -53,7 +53,7 @@ Compiling `python2.7-static` was a one-off manual process. Automating this proce
 
 == Executable binary layout ==
 
- * Python 2.7 (r27:82500) on Linux i386, statically linked
+ * Python 2.7 (`r27:82500`) on Linux i386, statically linked
  * compiled and linked with uClibc, so it supports username lookups and DNS lookups as well (without NSS).
  * pure Python and C extensions integrated to a single, statically linked, i386 (i686) Linux executable
  * compiled with uClibc so it can do DNS lookups without `/lib/libss_*so*`

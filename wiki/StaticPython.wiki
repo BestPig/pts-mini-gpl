@@ -6,7 +6,7 @@
 
 = Download and run =
 
-Download <a href="http://pts-mini-gpl.googlecode.com/files/python2.7-static">the !StaticPython 2.7 executable binary</a>.
+Download <a href="http://pts-mini-gpl.googlecode.com/files/python2.7-static">the !StaticPython 2.7 executable binary</a> for version 0.1.
 
 Here is how to use it:
 

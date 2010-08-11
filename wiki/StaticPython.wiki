@@ -59,8 +59,8 @@ Here is how to recompile for yourself:
 $ cd /tmp
 $ svn checkout http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython staticpython-build
 $ cd staticpython-build
-$ ./build.sh  # Build the non-Stackless vesion.
-$ ./build.sh  # Build to Stackless version.
+$ ./build.sh             # Build the non-Stackless vesion.
+$ ./build.sh  stackless  # Build to Stackless version.
 }}}
 
 To extend and customize !StaticPython, look at the `build.sh` script and the files in its

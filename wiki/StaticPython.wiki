@@ -1,33 +1,70 @@
 #summary Statically linked Python 2.x for 32-bit Linux
 
-= What is StaticPython?
+= What is !StaticPython? =
 
-StaticPython is a statically linked version of the Python 2.x (currently 2.7) interpreter and its standard modules for 32-bit Linux systems (i686, i386). It is distributed as a single, statically linked 32-bit Linux executable binary, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
+!StaticPython is a statically linked version of the Python 2.x (currently 2.7) interpreter and its standard modules for 32-bit Linux systems (i686, i386). It is distributed as a single, statically linked 32-bit Linux executable binary, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
 
 = Download and run =
 
-<pre>$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/files/python2.7-static
+Download <a href="http://pts-mini-gpl.googlecode.com/files/python2.7-static">the !StaticPython 2.7 executable binary</a>.
+
+Here is how to use it:
+
+{{{
+$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/files/python2.7-static
 $ chmod +x python2.7-static
 $ ./python2.7-static
 Python 2.7 (r27:82500, Aug 11 2010, 10:51:33) 
 [GCC 4.1.2] on linux2
 Type "help", "copyright", "credits" or "license" for more information.
->>></pre>
+>>>
+}}}
 
-= For what purpose is StaticPython useful?
+= For what purpose is !StaticPython useful? =
 
-  * for running Python scripts in chroot and other restricted environments
+  * for running Python scripts in chroot and other restricted environments (e.g. for running untrusted standard Python code)
   * for running CGI scripts on some web hosting providers where Python is not preinstalled (this is slow)
   * for trying the newest Python and running scripts on a very old Linux system or on a system where package installation is not possible or cumbersome
+  * for deploying and running Tornado, Eventlet or Twisted-based networking applications on a machine without a working Python installation (please note that the framework itself has also to be deployed)
 
-= Introduction =
+= When isn't !StaticPython recommended? =
 
-Add your content here.
+  * if dependencies need Python package installation (e.g. distutils, setuptools, `setup.py`, Pyrex, Cython) -- distutils is not included, there is no `site-packages` directory, loading `.so` files is not supported
+  * if dependencies are or need shared libraries (`.so` files) -- !StaticPython doesn't support loading `.so` files, not even with the _dl_ or _ctypes_ modules
+  * if startup and module import has to be fast -- since !StaticPython stores `.py` files (no `.pyc`) in a ZIP file at the end of the binary
+  * for GUI programming -- no GUI or graphics library is included, loading `.so` files is not supported
 
+= How to extend, customize or recompile !StaticPython? =
 
-= Details =
+Compiling `python2.7-static` was a one-off manual process. Automating this process has not been implemented yet. Please contact the author if you need this.
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+= Feature details =
+
+== Features provided ==
+
+ * feature: command-line editing with the built-in readline module
+ * feature: almost all standard Python 2.7 modules built-in
+ * feature: almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `spwd`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
+ * feature: greenlet integrated for coroutine support
+ * feature: multithreading (using thread and threading as usual)
+ * feature: line editing even without a terminfo definition or inputrc file
+   (useful in chroot, provided by libreadline/libncurses by default)
+ * feature: the usual help, license used in interactive mode
+
+== Executable binary layout ==
+
+ * Python 2.7 (r27:82500) on Linux i386, statically linked
+ * compiled and linked with uClibc, so it supports username lookups and DNS lookups as well (without NSS).
+ * pure Python and C extensions integrated to a single, statically linked, i386 (i686) Linux executable
+ * compiled with uClibc so it can do DNS lookups without `/lib/libss_*so*`
+ * can run from any directory, even in chroot containing only the binary, even in interactive mode, even without /proc mounted
+
+== Features missing ==
+
+ * missing: loading .so files (C shared libraries, Python C extensions)
+ * missing: the `ctypes` module and the `dl` module (since no `.so` file loading support)
+ * missing: the `distutils` module, custom extension installation
+ * missing: !OpenSSL, SSL sockets
+ * missing: IPv6 support
+ * missing: GUI bindings (tkinter, GTK, Qt etc.)
+ * missing: Stackless Python

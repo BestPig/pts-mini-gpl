@@ -1,0 +1,33 @@
+#summary Statically linked Python 2.x for 32-bit Linux
+
+= What is StaticPython?
+
+StaticPython is a statically linked version of the Python 2.x (currently 2.7) interpreter and its standard modules for 32-bit Linux systems (i686, i386). It is distributed as a single, statically linked 32-bit Linux executable binary, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
+
+= Download and run =
+
+<pre>$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/files/python2.7-static
+$ chmod +x python2.7-static
+$ ./python2.7-static
+Python 2.7 (r27:82500, Aug 11 2010, 10:51:33) 
+[GCC 4.1.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>></pre>
+
+= For what purpose is StaticPython useful?
+
+  * for running Python scripts in chroot and other restricted environments
+  * for running CGI scripts on some web hosting providers where Python is not preinstalled (this is slow)
+  * for trying the newest Python and running scripts on a very old Linux system or on a system where package installation is not possible or cumbersome
+
+= Introduction =
+
+Add your content here.
+
+
+= Details =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages

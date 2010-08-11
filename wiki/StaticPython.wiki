@@ -83,6 +83,6 @@ Compiling `python2.7-static` and `stackless2.7-static` was a one-off manual proc
  * missing: loading .so files (C shared libraries, Python C extensions)
  * missing: the `ctypes` module and the `dl` module (since no `.so` file loading support)
  * missing: the `distutils` module, custom extension installation
- * missing: !OpenSSL, SSL sockets
+ * missing: OpenSSL, SSL sockets
  * missing: IPv6 support
  * missing: GUI bindings (tkinter, GTK, Qt etc.)

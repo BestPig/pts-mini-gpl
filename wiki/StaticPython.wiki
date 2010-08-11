@@ -20,7 +20,20 @@ $ ./python2.7-static
 Python 2.7 (r27:82500, Aug 11 2010, 10:51:33) 
 [GCC 4.1.2] on linux2
 Type "help", "copyright", "credits" or "license" for more information.
->>>
+>>> 
+}}}
+
+Here is how to use the Stackless version:
+
+{{{
+$ wget -O stackless2.7-static http://pts-mini-gpl.googlecode.com/files/stackless2.7-static
+$ chmod +x stackless2.7-static
+$ ./stackless2.7-static
+Python 2.7 Stackless 3.1b3 060516 (release27-maint, Aug 11 2010, 13:55:35) 
+[GCC 4.1.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import stackless
+>>> 
 }}}
 
 = For what purpose is !StaticPython useful? =

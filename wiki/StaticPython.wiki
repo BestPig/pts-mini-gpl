@@ -42,14 +42,14 @@ Compiling `python2.7-static` was a one-off manual process. Automating this proce
 
 == Features provided ==
 
- * feature: command-line editing with the built-in readline module
- * feature: almost all standard Python 2.7 modules built-in
- * feature: almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `spwd`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
- * feature: greenlet integrated for coroutine support
- * feature: multithreading (using thread and threading as usual)
- * feature: line editing even without a terminfo definition or inputrc file
+ * command-line editing with the built-in readline module
+ * almost all standard Python 2.7 modules built-in
+ * almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `spwd`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
+ * greenlet integrated for coroutine support
+ * multithreading (using thread and threading as usual)
+ * line editing even without a terminfo definition or inputrc file
    (useful in chroot, provided by libreadline/libncurses by default)
- * feature: the usual help, license used in interactive mode
+ * the usual help, license used in interactive mode
 
 == Executable binary layout ==
 

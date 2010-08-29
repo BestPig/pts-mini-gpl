@@ -1,0 +1,78 @@
+diff --git a/lib/web_socket.rb b/lib/web_socket.rb
+index 7947118..aef8ef7 100644
+--- a/lib/web_socket.rb
++++ b/lib/web_socket.rb
+@@ -31,10 +31,15 @@ class WebSocket
+         end
+         @path = $1
+         read_header()
++        @handshaked = false
+         if !@header["Sec-WebSocket-Key1"] || !@header["Sec-WebSocket-Key2"]
+-          raise(WebSocket::Error,
+-            "Client speaks old WebSocket protocol, " +
+-            "missing header Sec-WebSocket-Key1 and Sec-WebSocket-Key2")
++          if not params[:enable_draft75]
++            raise(WebSocket::Error,
++              "Client speaks old WebSocket protocol, which is disabled, " +
++              "missing header Sec-WebSocket-Key1 and Sec-WebSocket-Key2")
++          end
++          @key3 = nil
++          return
+         end
+         @key3 = read(8)
+         if !@server.accepted_origin?(self.origin)
+@@ -45,7 +50,6 @@ class WebSocket
+               "  WebSocketServer.new(..., :accepted_domains => [\"*\"])\n") %
+             [self.origin, @server.accepted_domains, @server.origin_to_domain(self.origin)])
+         end
+-        @handshaked = false
+ 
+       else # client
+ 
+@@ -114,13 +118,14 @@ class WebSocket
+         raise(WebSocket::Error, "handshake has already been done")
+       end
+       status ||= "101 Web Socket Protocol Handshake"
++      sec_prefix = @key3 ? "Sec-" : ""
+       def_header = {
+-        "Sec-WebSocket-Origin" => self.origin,
+-        "Sec-WebSocket-Location" => self.location,
++        "#{sec_prefix}WebSocket-Origin" => self.origin,
++        "#{sec_prefix}WebSocket-Location" => self.location,
+       }
+       header = def_header.merge(header)
+       header_str = header.map(){ |k, v| "#{k}: #{v}\r\n" }.join("")
+-      digest = security_digest(
++      digest = @key3 and security_digest(
+         @header["Sec-WebSocket-Key1"], @header["Sec-WebSocket-Key2"], @key3)
+       # Note that Upgrade and Connection must appear in this order.
+       write(
+@@ -299,6 +304,7 @@ class WebSocketServer
+       end
+       @port = params[:port] || 80
+       @accepted_domains = params[:accepted_domains]
++      @enable_draft75 = params[:enable_draft75]
+       if !@accepted_domains
+         raise(ArgumentError, "params[:accepted_domains] is required")
+       end
+@@ -350,7 +356,7 @@ class WebSocketServer
+         return nil
+       else
+         socket.ungetc(ch)
+-        return WebSocket.new(socket, :server => self)
++        return WebSocket.new(socket, :server => self, :enable_draft75 => @enable_draft75)
+       end
+     end
+ 
+diff --git a/samples/echo_server.rb b/samples/echo_server.rb
+index 707ac98..38920f3 100644
+--- a/samples/echo_server.rb
++++ b/samples/echo_server.rb
+@@ -12,6 +12,7 @@ if ARGV.size != 2
+ end
+ 
+ server = WebSocketServer.new(
++  :enable_draft75 => true,
+   :accepted_domains => [ARGV[0]],
+   :port => ARGV[1].to_i())
+ puts("Server is running at port %d" % server.port)

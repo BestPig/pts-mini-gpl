@@ -1,0 +1,1 @@
+web-socket-ruby patch to enable the old (draft 75) handshake used by Chrome 5.0.307.11

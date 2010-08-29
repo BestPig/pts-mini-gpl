@@ -43,7 +43,7 @@ index 7947118..aef8ef7 100644
        header = def_header.merge(header)
        header_str = header.map(){ |k, v| "#{k}: #{v}\r\n" }.join("")
 -      digest = security_digest(
-+      digest = @key3 and security_digest(
++      digest = @key3 && security_digest(
          @header["Sec-WebSocket-Key1"], @header["Sec-WebSocket-Key2"], @key3)
        # Note that Upgrade and Connection must appear in this order.
        write(

@@ -1,0 +1,12 @@
+pts-twisted-10.1.0-builtin-epoll.svn.diff
+by pts@fazekas.hu at Fri Sep  3 15:08:30 CEST 2010
+
+This patch makes Twisted able to use the built-in select.epoll class
+available in Python 2.6 and later, so Twisted gets fast polling via epoll
+even on systems where C extensions (like Twisted's _epoll.c) cannot be
+compiled.
+
+This patch achieves its goal by adding methods to epoll class defined
+_epoll.pyx which are compatible with the methods of select.epoll, then
+making epollreactor.py use these methods, and finally making epollreactor.py
+import select.epoll if twisted.python._epoll is not available.

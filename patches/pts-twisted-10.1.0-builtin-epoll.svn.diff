@@ -1,0 +1,1873 @@
+pts-twisted-10.1.0-builtin-epoll.svn.diff
+by pts@fazekas.hu at Fri Sep  3 15:08:30 CEST 2010
+
+This patch makes Twisted able to use the built-in select.epoll class
+available in Python 2.6 and later, so Twisted gets fast polling via epoll
+even on systems where C extensions (like Twisted's _epoll.c) cannot be
+compiled.
+
+This patch achieves its goal by adding methods to epoll class defined
+_epoll.pyx which are compatible with the methods of select.epoll, then
+making epollreactor.py use these methods, and finally making epollreactor.py
+import select.epoll if twisted.python._epoll is not available.
+
+Index: twisted/internet/epollreactor.py
+===================================================================
+--- twisted/internet/epollreactor.py	(revision 29956)
++++ twisted/internet/epollreactor.py	(working copy)
+@@ -11,19 +11,24 @@
+     epollreactor.install()
+ """
+ 
+-import sys, errno
++import sys, errno, time
+ 
+ from zope.interface import implements
+ 
+ from twisted.internet.interfaces import IReactorFDSet
+ 
+-from twisted.python import _epoll
++try:
++  from twisted.python import _epoll
++except ImportError:
++  from select import epoll  # Python 2.6 and later.
++  del epoll
++  import select as _epoll
+ from twisted.python import log
+ from twisted.internet import posixbase, error
+ from twisted.internet.main import CONNECTION_DONE, CONNECTION_LOST
+ 
+ 
+-_POLL_DISCONNECTED = (_epoll.HUP | _epoll.ERR)
++_POLL_DISCONNECTED = (_epoll.EPOLLHUP | _epoll.EPOLLERR)
+ 
+ class EPollReactor(posixbase.PosixReactorBase):
+     """
+@@ -75,17 +80,17 @@
+         """
+         fd = xer.fileno()
+         if fd not in primary:
+-            cmd = _epoll.CTL_ADD
+             flags = event
+-            if fd in other:
+-                flags |= antievent
+-                cmd = _epoll.CTL_MOD
+             # epoll_ctl can raise all kinds of IOErrors, and every one
+             # indicates a bug either in the reactor or application-code.
+             # Let them all through so someone sees a traceback and fixes
+             # something.  We'll do the same thing for every other call to
+             # this method in this file.
+-            self._poller._control(cmd, fd, flags)
++            if fd in other:
++                flags |= antievent
++                self._poller.modify(fd, flags)
++            else:
++                self._poller.register(fd, flags)
+ 
+             # Update our own tracking state *only* after the epoll call has
+             # succeeded.  Otherwise we may get out of sync.
+@@ -97,14 +102,14 @@
+         """
+         Add a FileDescriptor for notification of data available to read.
+         """
+-        self._add(reader, self._reads, self._writes, self._selectables, _epoll.IN, _epoll.OUT)
++        self._add(reader, self._reads, self._writes, self._selectables, _epoll.EPOLLIN, _epoll.EPOLLOUT)
+ 
+ 
+     def addWriter(self, writer):
+         """
+         Add a FileDescriptor for notification of data available to write.
+         """
+-        self._add(writer, self._writes, self._reads, self._selectables, _epoll.OUT, _epoll.IN)
++        self._add(writer, self._writes, self._reads, self._selectables, _epoll.EPOLLOUT, _epoll.EPOLLIN)
+ 
+ 
+     def _remove(self, xer, primary, other, selectables, event, antievent):
+@@ -122,30 +127,29 @@
+             else:
+                 return
+         if fd in primary:
+-            cmd = _epoll.CTL_DEL
+-            flags = event
+             if fd in other:
+                 flags = antievent
+-                cmd = _epoll.CTL_MOD
++                # See comment above modify call in _add.
++                self._poller.modify(fd, flags)
+             else:
+                 del selectables[fd]
++                # See comment above _control call in _add.
++                self._poller.unregister(fd)
+             del primary[fd]
+-            # See comment above _control call in _add.
+-            self._poller._control(cmd, fd, flags)
+ 
+ 
+     def removeReader(self, reader):
+         """
+         Remove a Selectable for notification of data available to read.
+         """
+-        self._remove(reader, self._reads, self._writes, self._selectables, _epoll.IN, _epoll.OUT)
++        self._remove(reader, self._reads, self._writes, self._selectables, _epoll.EPOLLIN, _epoll.EPOLLOUT)
+ 
+ 
+     def removeWriter(self, writer):
+         """
+         Remove a Selectable for notification of data available to write.
+         """
+-        self._remove(writer, self._writes, self._reads, self._selectables, _epoll.OUT, _epoll.IN)
++        self._remove(writer, self._writes, self._reads, self._selectables, _epoll.EPOLLOUT, _epoll.EPOLLIN)
+ 
+     def removeAll(self):
+         """
+@@ -169,15 +173,19 @@
+         Poll the poller for new events.
+         """
+         if timeout is None:
+-            timeout = 1
+-        timeout = int(timeout * 1000) # convert seconds to milliseconds
++            timeout = -1  # Wait indefinitely.
+ 
+         try:
+-            # Limit the number of events to the number of io objects we're
+-            # currently tracking (because that's maybe a good heuristic) and
+-            # the amount of time we block to the value specified by our
+-            # caller.
+-            l = self._poller.wait(len(self._selectables), timeout)
++            if self._selectables:
++                # Limit the number of events to the number of io objects
++                # we're currently tracking (because that's maybe a good
++                # heuristic) and the amount of time we block to the value
++                # specified by our caller.
++                l = self._poller.poll(timeout, len(self._selectables))
++            else:
++                # select.epoll.poll doesn't let us wait for no filehandle,
++                # so we just sleep here.
++                time.sleep(timeout)
+         except IOError, err:
+             if err.errno == errno.EINTR:
+                 return
+@@ -205,7 +213,7 @@
+         """
+         why = None
+         inRead = False
+-        if event & _POLL_DISCONNECTED and not (event & _epoll.IN):
++        if event & _POLL_DISCONNECTED and not (event & _epoll.EPOLLIN):
+             if fd in self._reads:
+                 inRead = True
+                 why = CONNECTION_DONE
+@@ -213,10 +221,10 @@
+                 why = CONNECTION_LOST
+         else:
+             try:
+-                if event & _epoll.IN:
++                if event & _epoll.EPOLLIN:
+                     why = selectable.doRead()
+                     inRead = True
+-                if not why and event & _epoll.OUT:
++                if not why and event & _epoll.EPOLLOUT:
+                     why = selectable.doWrite()
+                     inRead = False
+                 if selectable.fileno() != fd:
+Index: twisted/python/_epoll.pyx
+===================================================================
+--- twisted/python/_epoll.pyx	(revision 29956)
++++ twisted/python/_epoll.pyx	(working copy)
+@@ -34,17 +34,17 @@
+         EPOLL_CTL_MOD = 3
+ 
+     cdef enum EPOLL_EVENTS:
+-        EPOLLIN = 0x001
+-        EPOLLPRI = 0x002
+-        EPOLLOUT = 0x004
+-        EPOLLRDNORM = 0x040
+-        EPOLLRDBAND = 0x080
+-        EPOLLWRNORM = 0x100
+-        EPOLLWRBAND = 0x200
+-        EPOLLMSG = 0x400
+-        EPOLLERR = 0x008
+-        EPOLLHUP = 0x010
+-        EPOLLET = (1 << 31)
++        c_EPOLLIN "EPOLLIN" = 0x001
++        c_EPOLLPRI "EPOLLPRI" = 0x002
++        c_EPOLLOUT "EPOLLOUT" = 0x004
++        c_EPOLLRDNORM "EPOLLRDNORM" = 0x040
++        c_EPOLLRDBAND "EPOLLRDBAND" = 0x080
++        c_EPOLLWRNORM "EPOLLWRNORM" = 0x100
++        c_EPOLLWRBAND "EPOLLWRBAND" = 0x200
++        c_EPOLLMSG "EPOLLMSG" = 0x400
++        c_EPOLLERR "EPOLLERR" = 0x008
++        c_EPOLLHUP "EPOLLHUP" = 0x010
++        c_EPOLLET "EPOLLET" = (1 << 31)
+ 
+     ctypedef union epoll_data_t:
+         void *ptr
+@@ -65,6 +65,44 @@
+     cdef extern PyThreadState *PyEval_SaveThread()
+     cdef extern void PyEval_RestoreThread(PyThreadState*)
+ 
++cdef call_epoll_wait(int fd, unsigned int maxevents, int timeout_msec):
++    """
++    Wait for an I/O event, wrap epoll_wait(2).
++
++    @type fd: C{int}
++    @param fd: The epoll file descriptor number.
++
++    @type maxevents: C{int}
++    @param maxevents: Maximum number of events returned.
++
++    @type timeout_msec: C{int}
++    @param timeout_msec: Maximum time in milliseconds waiting for events. 0
++        makes it return immediately whereas -1 makes it wait indefinitely.
++
++    @raise IOError: Raised if the underlying epoll_wait() call fails.
++    """
++    cdef epoll_event *events
++    cdef int result
++    cdef int nbytes
++    cdef PyThreadState *_save
++
++    nbytes = sizeof(epoll_event) * maxevents
++    events = <epoll_event*>malloc(nbytes)
++    memset(events, 0, nbytes)
++    try:
++        _save = PyEval_SaveThread()
++        result = epoll_wait(fd, events, maxevents, timeout_msec)
++        PyEval_RestoreThread(_save)
++
++        if result == -1:
++            raise IOError(errno, strerror(errno))
++        results = []
++        for i from 0 <= i < result:
++            results.append((events[i].data.fd, <int>events[i].events))
++        return results
++    finally:
++        free(events)
++
+ cdef class epoll:
+     """
+     Represent a set of file descriptors being monitored for events.
+@@ -73,7 +111,10 @@
+     cdef int fd
+     cdef int initialized
+ 
+-    def __init__(self, int size):
++    def __init__(self, int size=1023):
++        """
++        The constructor arguments are compatible with select.poll.__init__.
++        """
+         self.fd = epoll_create(size)
+         if self.fd == -1:
+             raise IOError(errno, strerror(errno))
+@@ -99,6 +140,75 @@
+         """
+         return self.fd
+ 
++    def register(self, int fd, int events):
++        """
++        Add (register) a file descriptor to be monitored by self.
++
++        This method is compatible with select.epoll.register in Python 2.6.
++
++        Wrap epoll_ctl(2).
++
++        @type fd: C{int}
++        @param fd: File descriptor to modify
++
++        @type events: C{int}
++        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.
++
++        @raise IOError: Raised if the underlying epoll_ctl() call fails.
++        """
++        cdef int result
++        cdef epoll_event evt
++        evt.events = events
++        evt.data.fd = fd
++        result = epoll_ctl(self.fd, CTL_ADD, fd, &evt)
++        if result == -1:
++            raise IOError(errno, strerror(errno))
++
++    def unregister(self, int fd):
++        """
++        Remove (unregister) a file descriptor monitored by self.
++
++        This method is compatible with select.epoll.unregister in Python 2.6.
++
++        Wrap epoll_ctl(2).
++
++        @type fd: C{int}
++        @param fd: File descriptor to modify
++
++        @raise IOError: Raised if the underlying epoll_ctl() call fails.
++        """
++        cdef int result
++        cdef epoll_event evt
++        # We don't have to fill evt.events for CTL_DEL.
++        evt.data.fd = fd
++        result = epoll_ctl(self.fd, CTL_DEL, fd, &evt)
++        if result == -1:
++            raise IOError(errno, strerror(errno))
++
++    def modify(self, int fd, int events):
++        """
++        Modify the modified state of a file descriptor monitored by self.
++
++        This method is compatible with select.epoll.modify in Python 2.6.
++
++        Wrap epoll_ctl(2).
++
++        @type fd: C{int}
++        @param fd: File descriptor to modify
++
++        @type events: C{int}
++        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.
++
++        @raise IOError: Raised if the underlying epoll_ctl() call fails.
++        """
++        cdef int result
++        cdef epoll_event evt
++        evt.events = events
++        evt.data.fd = fd
++        result = epoll_ctl(self.fd, CTL_MOD, fd, &evt)
++        if result == -1:
++            raise IOError(errno, strerror(errno))
++
+     def _control(self, int op, int fd, int events):
+         """
+         Modify the monitored state of a particular file descriptor.
+@@ -132,50 +242,44 @@
+         @param maxevents: Maximum number of events returned.
+ 
+         @type timeout: C{int}
++        @param timeout: Maximum time in milliseconds waiting for events. 0
++            makes it return immediately whereas -1 makes it wait indefinitely.
++        
++        @raise IOError: Raised if the underlying epoll_wait() call fails.
++        """
++        return call_epoll_wait(self.fd, maxevents, timeout)
++
++    def poll(self, float timeout=-1, unsigned int maxevents=1024):
++        """
++        Wait for an I/O event, wrap epoll_wait(2).
++
++        This method is compatible with select.epoll.poll in Python 2.6.
++
++        @type maxevents: C{int}
++        @param maxevents: Maximum number of events returned.
++
++        @type timeout: C{int}
+         @param timeout: Maximum time waiting for events. 0 makes it return
+             immediately whereas -1 makes it wait indefinitely.
+         
+         @raise IOError: Raised if the underlying epoll_wait() call fails.
+         """
+-        cdef epoll_event *events
+-        cdef int result
+-        cdef int nbytes
+-        cdef int fd
+-        cdef PyThreadState *_save
++        return call_epoll_wait(self.fd, maxevents, <int>(timeout * 1000.0))
+ 
+-        nbytes = sizeof(epoll_event) * maxevents
+-        events = <epoll_event*>malloc(nbytes)
+-        memset(events, 0, nbytes)
+-        try:
+-            fd = self.fd
+ 
+-            _save = PyEval_SaveThread()
+-            result = epoll_wait(fd, events, maxevents, timeout)
+-            PyEval_RestoreThread(_save)
+-
+-            if result == -1:
+-                raise IOError(errno, strerror(errno))
+-            results = []
+-            for i from 0 <= i < result:
+-                results.append((events[i].data.fd, <int>events[i].events))
+-            return results
+-        finally:
+-            free(events)
+-
+ CTL_ADD = EPOLL_CTL_ADD
+ CTL_DEL = EPOLL_CTL_DEL
+ CTL_MOD = EPOLL_CTL_MOD
+ 
+-IN = EPOLLIN
+-OUT = EPOLLOUT
+-PRI = EPOLLPRI
+-ERR = EPOLLERR
+-HUP = EPOLLHUP
+-ET = EPOLLET
++IN = EPOLLIN = c_EPOLLIN
++OUT = EPOLLOUT = c_EPOLLOUT
++PRI = EPOLLPRI = c_EPOLLPRI
++ERR = EPOLLERR = c_EPOLLERR
++HUP = EPOLLHUP = c_EPOLLHUP
++ET = EPOLLET = c_EPOLLET
+ 
+-RDNORM = EPOLLRDNORM
+-RDBAND = EPOLLRDBAND
+-WRNORM = EPOLLWRNORM
+-WRBAND = EPOLLWRBAND
+-MSG = EPOLLMSG
+-
++RDNORM = EPOLLRDNORM = c_EPOLLRDNORM
++RDBAND = EPOLLRDBAND = c_EPOLLRDBAND
++WRNORM = EPOLLWRNORM = c_EPOLLWRNORM
++WRBAND = EPOLLWRBAND = c_EPOLLWRBAND
++MSG = EPOLLMSG = c_EPOLLMSG
+Index: twisted/python/_epoll.c
+===================================================================
+--- twisted/python/_epoll.c	(revision 29956)
++++ twisted/python/_epoll.c	(working copy)
+@@ -1,4 +1,4 @@
+-/* Generated by Pyrex 0.9.4.1 on Sun Oct 15 15:04:09 2006 */
++/* Generated by Pyrex 0.9.9 on Fri Sep  3 15:02:54 2010 */
+ 
+ #define PY_SSIZE_T_CLEAN
+ #include "Python.h"
+@@ -11,14 +11,22 @@
+   #define PY_SSIZE_T_MAX INT_MAX
+   #define PY_SSIZE_T_MIN INT_MIN
+   #define PyInt_FromSsize_t(z) PyInt_FromLong(z)
+-  #define PyInt_AsSsize_t(o)   PyInt_AsLong(o)
++  #define PyInt_AsSsize_t(o)	PyInt_AsLong(o)
+ #endif
++#if !defined(WIN32) && !defined(MS_WINDOWS)
++  #ifndef __stdcall
++    #define __stdcall
++  #endif
++  #ifndef __cdecl
++    #define __cdecl
++  #endif
++#endif
+ #ifdef __cplusplus
+ #define __PYX_EXTERN_C extern "C"
+ #else
+ #define __PYX_EXTERN_C extern
+ #endif
+-__PYX_EXTERN_C double pow(double, double);
++#include <math.h>
+ #include "stdio.h"
+ #include "errno.h"
+ #include "string.h"
+@@ -26,31 +34,7 @@
+ #include "sys/epoll.h"
+ 
+ 
+-typedef struct {const char *s; const void **p;} __Pyx_CApiTabEntry; /*proto*/
+-typedef struct {PyObject **p; char *s;} __Pyx_InternTabEntry; /*proto*/
+-typedef struct {PyObject **p; char *s; long n;} __Pyx_StringTabEntry; /*proto*/
+-static PyObject *__Pyx_UnpackItem(PyObject *, Py_ssize_t); /*proto*/
+-static int __Pyx_EndUnpack(PyObject *, Py_ssize_t); /*proto*/
+-static int __Pyx_PrintItem(PyObject *); /*proto*/
+-static int __Pyx_PrintNewline(void); /*proto*/
+-static void __Pyx_Raise(PyObject *type, PyObject *value, PyObject *tb); /*proto*/
+-static void __Pyx_ReRaise(void); /*proto*/
+-static PyObject *__Pyx_Import(PyObject *name, PyObject *from_list); /*proto*/
+-static PyObject *__Pyx_GetExcValue(void); /*proto*/
+-static int __Pyx_ArgTypeTest(PyObject *obj, PyTypeObject *type, int none_allowed, char *name); /*proto*/
+-static int __Pyx_TypeTest(PyObject *obj, PyTypeObject *type); /*proto*/
+-static int __Pyx_GetStarArgs(PyObject **args, PyObject **kwds, char *kwd_list[], Py_ssize_t nargs, PyObject **args2, PyObject **kwds2); /*proto*/
+-static void __Pyx_WriteUnraisable(char *name); /*proto*/
+-static void __Pyx_AddTraceback(char *funcname); /*proto*/
+-static PyTypeObject *__Pyx_ImportType(char *module_name, char *class_name, long size);  /*proto*/
+-static int __Pyx_SetVtable(PyObject *dict, void *vtable); /*proto*/
+-static int __Pyx_GetVtable(PyObject *dict, void *vtabptr); /*proto*/
+-static PyObject *__Pyx_CreateClass(PyObject *bases, PyObject *dict, PyObject *name, char *modname); /*proto*/
+-static int __Pyx_InternStrings(__Pyx_InternTabEntry *t); /*proto*/
+-static int __Pyx_InitStrings(__Pyx_StringTabEntry *t); /*proto*/
+-static int __Pyx_InitCApi(PyObject *module); /*proto*/
+-static int __Pyx_ImportModuleCApi(__Pyx_CApiTabEntry *t); /*proto*/
+-static PyObject *__Pyx_GetName(PyObject *dict, PyObject *name); /*proto*/
++typedef struct {PyObject **p; int i; char *s; long n;} __Pyx_StringTabEntry; /*proto*/
+ 
+ static PyObject *__pyx_m;
+ static PyObject *__pyx_b;
+@@ -60,77 +44,298 @@
+ 
+ static char __pyx_mdoc[] = "\nInterface to epoll I/O event notification facility.\n";
+ 
+-/* Declarations from _epoll */
++static void __Pyx_Raise(PyObject *type, PyObject *value, PyObject *tb); /*proto*/
+ 
++static PyObject *__Pyx_GetName(PyObject *dict, PyObject *name); /*proto*/
+ 
+-struct __pyx_obj_6_epoll_epoll {
++static int __Pyx_InitStrings(__Pyx_StringTabEntry *t); /*proto*/
++
++static void __Pyx_AddTraceback(char *funcname); /*proto*/
++
++/* Declarations from twisted.python._epoll */
++
++
++/* Declarations from implementation of twisted.python._epoll */
++
++struct __pyx_obj_7twisted_6python_6_epoll_epoll {
+   PyObject_HEAD
+   int fd;
+   int initialized;
+ };
+ 
+-static PyTypeObject *__pyx_ptype_6_epoll_epoll = 0;
+ 
+-/* Implementation of _epoll */
++static PyTypeObject *__pyx_ptype_7twisted_6python_6_epoll_epoll = 0;
++static PyObject *__pyx_f_7twisted_6python_6_epoll_call_epoll_wait(int,unsigned int,int); /*proto*/
+ 
++static char __pyx_k1[] = "append";
++static char __pyx_k2[] = "CTL_ADD";
++static char __pyx_k3[] = "CTL_DEL";
++static char __pyx_k4[] = "CTL_MOD";
++static char __pyx_k5[] = "IN";
++static char __pyx_k6[] = "EPOLLIN";
++static char __pyx_k7[] = "OUT";
++static char __pyx_k8[] = "EPOLLOUT";
++static char __pyx_k9[] = "PRI";
++static char __pyx_k10[] = "EPOLLPRI";
++static char __pyx_k11[] = "ERR";
++static char __pyx_k12[] = "EPOLLERR";
++static char __pyx_k13[] = "HUP";
++static char __pyx_k14[] = "EPOLLHUP";
++static char __pyx_k15[] = "ET";
++static char __pyx_k16[] = "EPOLLET";
++static char __pyx_k17[] = "RDNORM";
++static char __pyx_k18[] = "EPOLLRDNORM";
++static char __pyx_k19[] = "RDBAND";
++static char __pyx_k20[] = "EPOLLRDBAND";
++static char __pyx_k21[] = "WRNORM";
++static char __pyx_k22[] = "EPOLLWRNORM";
++static char __pyx_k23[] = "WRBAND";
++static char __pyx_k24[] = "EPOLLWRBAND";
++static char __pyx_k25[] = "MSG";
++static char __pyx_k26[] = "EPOLLMSG";
++
+ static PyObject *__pyx_n_CTL_ADD;
+ static PyObject *__pyx_n_CTL_DEL;
+ static PyObject *__pyx_n_CTL_MOD;
++static PyObject *__pyx_n_EPOLLERR;
++static PyObject *__pyx_n_EPOLLET;
++static PyObject *__pyx_n_EPOLLHUP;
++static PyObject *__pyx_n_EPOLLIN;
++static PyObject *__pyx_n_EPOLLMSG;
++static PyObject *__pyx_n_EPOLLOUT;
++static PyObject *__pyx_n_EPOLLPRI;
++static PyObject *__pyx_n_EPOLLRDBAND;
++static PyObject *__pyx_n_EPOLLRDNORM;
++static PyObject *__pyx_n_EPOLLWRBAND;
++static PyObject *__pyx_n_EPOLLWRNORM;
++static PyObject *__pyx_n_ERR;
++static PyObject *__pyx_n_ET;
++static PyObject *__pyx_n_HUP;
+ static PyObject *__pyx_n_IN;
++static PyObject *__pyx_n_MSG;
+ static PyObject *__pyx_n_OUT;
+ static PyObject *__pyx_n_PRI;
+-static PyObject *__pyx_n_ERR;
+-static PyObject *__pyx_n_HUP;
+-static PyObject *__pyx_n_ET;
++static PyObject *__pyx_n_RDBAND;
+ static PyObject *__pyx_n_RDNORM;
+-static PyObject *__pyx_n_RDBAND;
++static PyObject *__pyx_n_WRBAND;
+ static PyObject *__pyx_n_WRNORM;
+-static PyObject *__pyx_n_WRBAND;
+-static PyObject *__pyx_n_MSG;
++static PyObject *__pyx_n_append;
+ 
+-static PyObject *__pyx_n_IOError;
+ 
+-static int __pyx_f_6_epoll_5epoll___init__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+-static int __pyx_f_6_epoll_5epoll___init__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++static __Pyx_StringTabEntry __pyx_string_tab[] = {
++  {&__pyx_n_CTL_ADD, 1, __pyx_k2, sizeof(__pyx_k2)},
++  {&__pyx_n_CTL_DEL, 1, __pyx_k3, sizeof(__pyx_k3)},
++  {&__pyx_n_CTL_MOD, 1, __pyx_k4, sizeof(__pyx_k4)},
++  {&__pyx_n_EPOLLERR, 1, __pyx_k12, sizeof(__pyx_k12)},
++  {&__pyx_n_EPOLLET, 1, __pyx_k16, sizeof(__pyx_k16)},
++  {&__pyx_n_EPOLLHUP, 1, __pyx_k14, sizeof(__pyx_k14)},
++  {&__pyx_n_EPOLLIN, 1, __pyx_k6, sizeof(__pyx_k6)},
++  {&__pyx_n_EPOLLMSG, 1, __pyx_k26, sizeof(__pyx_k26)},
++  {&__pyx_n_EPOLLOUT, 1, __pyx_k8, sizeof(__pyx_k8)},
++  {&__pyx_n_EPOLLPRI, 1, __pyx_k10, sizeof(__pyx_k10)},
++  {&__pyx_n_EPOLLRDBAND, 1, __pyx_k20, sizeof(__pyx_k20)},
++  {&__pyx_n_EPOLLRDNORM, 1, __pyx_k18, sizeof(__pyx_k18)},
++  {&__pyx_n_EPOLLWRBAND, 1, __pyx_k24, sizeof(__pyx_k24)},
++  {&__pyx_n_EPOLLWRNORM, 1, __pyx_k22, sizeof(__pyx_k22)},
++  {&__pyx_n_ERR, 1, __pyx_k11, sizeof(__pyx_k11)},
++  {&__pyx_n_ET, 1, __pyx_k15, sizeof(__pyx_k15)},
++  {&__pyx_n_HUP, 1, __pyx_k13, sizeof(__pyx_k13)},
++  {&__pyx_n_IN, 1, __pyx_k5, sizeof(__pyx_k5)},
++  {&__pyx_n_MSG, 1, __pyx_k25, sizeof(__pyx_k25)},
++  {&__pyx_n_OUT, 1, __pyx_k7, sizeof(__pyx_k7)},
++  {&__pyx_n_PRI, 1, __pyx_k9, sizeof(__pyx_k9)},
++  {&__pyx_n_RDBAND, 1, __pyx_k19, sizeof(__pyx_k19)},
++  {&__pyx_n_RDNORM, 1, __pyx_k17, sizeof(__pyx_k17)},
++  {&__pyx_n_WRBAND, 1, __pyx_k23, sizeof(__pyx_k23)},
++  {&__pyx_n_WRNORM, 1, __pyx_k21, sizeof(__pyx_k21)},
++  {&__pyx_n_append, 1, __pyx_k1, sizeof(__pyx_k1)},
++  {0, 0, 0, 0}
++};
++
++static int __pyx_d1;
++static float __pyx_d2;
++static unsigned int __pyx_d3;
++
++
++/* Implementation of twisted.python._epoll */
++
++static PyObject *__pyx_f_7twisted_6python_6_epoll_call_epoll_wait(int __pyx_v_fd,unsigned int __pyx_v_maxevents,int __pyx_v_timeout_msec) {
++  struct epoll_event *__pyx_v_events;
++  int __pyx_v_result;
++  int __pyx_v_nbytes;
++  PyThreadState *__pyx_v__save;
++  PyObject *__pyx_v_results;
++  PyObject *__pyx_v_i;
++  PyObject *__pyx_r;
++  int __pyx_1;
++  PyObject *__pyx_2 = 0;
++  PyObject *__pyx_3 = 0;
++  PyObject *__pyx_4 = 0;
++  long __pyx_5;
++  Py_ssize_t __pyx_6;
++  PyObject *__pyx_7 = 0;
++  __pyx_v_results = Py_None; Py_INCREF(Py_None);
++  __pyx_v_i = Py_None; Py_INCREF(Py_None);
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":89 */
++  __pyx_v_nbytes = ((sizeof(struct epoll_event)) * __pyx_v_maxevents);
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":90 */
++  __pyx_v_events = ((struct epoll_event *)malloc(__pyx_v_nbytes));
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":91 */
++  memset(__pyx_v_events,0,__pyx_v_nbytes);
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":92 */
++  /*try:*/ {
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":93 */
++    __pyx_v__save = PyEval_SaveThread();
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":94 */
++    __pyx_v_result = epoll_wait(__pyx_v_fd,__pyx_v_events,__pyx_v_maxevents,__pyx_v_timeout_msec);
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":95 */
++    PyEval_RestoreThread(__pyx_v__save);
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":97 */
++    __pyx_1 = (__pyx_v_result == (-1));
++    if (__pyx_1) {
++      __pyx_2 = PyInt_FromLong(errno); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 98; goto __pyx_L3;}
++      __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 98; goto __pyx_L3;}
++      __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 98; goto __pyx_L3;}
++      PyTuple_SET_ITEM(__pyx_4, 0, __pyx_2);
++      PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++      __pyx_2 = 0;
++      __pyx_3 = 0;
++      __pyx_2 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 98; goto __pyx_L3;}
++      Py_DECREF(__pyx_4); __pyx_4 = 0;
++      __Pyx_Raise(__pyx_2, 0, 0);
++      Py_DECREF(__pyx_2); __pyx_2 = 0;
++      {__pyx_filename = __pyx_f[0]; __pyx_lineno = 98; goto __pyx_L3;}
++      goto __pyx_L5;
++    }
++    __pyx_L5:;
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":99 */
++    __pyx_3 = PyList_New(0); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 99; goto __pyx_L3;}
++    Py_DECREF(__pyx_v_results);
++    __pyx_v_results = __pyx_3;
++    __pyx_3 = 0;
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":100 */
++    for (__pyx_5 = 0; __pyx_5 < __pyx_v_result; ++__pyx_5) {
++      __pyx_4 = PyInt_FromLong(__pyx_5); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 100; goto __pyx_L3;}
++      Py_DECREF(__pyx_v_i);
++      __pyx_v_i = __pyx_4;
++      __pyx_4 = 0;
++      __pyx_2 = PyObject_GetAttr(__pyx_v_results, __pyx_n_append); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      __pyx_6 = PyInt_AsSsize_t(__pyx_v_i); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      __pyx_3 = PyInt_FromLong((__pyx_v_events[__pyx_6]).data.fd); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      __pyx_6 = PyInt_AsSsize_t(__pyx_v_i); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      __pyx_4 = PyInt_FromLong(((int)(__pyx_v_events[__pyx_6]).events)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      __pyx_7 = PyTuple_New(2); if (!__pyx_7) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      PyTuple_SET_ITEM(__pyx_7, 0, __pyx_3);
++      PyTuple_SET_ITEM(__pyx_7, 1, __pyx_4);
++      __pyx_3 = 0;
++      __pyx_4 = 0;
++      __pyx_3 = PyTuple_New(1); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      PyTuple_SET_ITEM(__pyx_3, 0, __pyx_7);
++      __pyx_7 = 0;
++      __pyx_4 = PyObject_CallObject(__pyx_2, __pyx_3); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 101; goto __pyx_L3;}
++      Py_DECREF(__pyx_2); __pyx_2 = 0;
++      Py_DECREF(__pyx_3); __pyx_3 = 0;
++      Py_DECREF(__pyx_4); __pyx_4 = 0;
++    }
++
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":102 */
++    Py_INCREF(__pyx_v_results);
++    __pyx_r = __pyx_v_results;
++    goto __pyx_L2;
++  }
++  /*finally:*/ {
++    int __pyx_why;
++    PyObject *__pyx_exc_type, *__pyx_exc_value, *__pyx_exc_tb;
++    int __pyx_exc_lineno;
++    __pyx_why = 0; goto __pyx_L4;
++    __pyx_L2: __pyx_why = 3; goto __pyx_L4;
++    __pyx_L3: {
++      __pyx_why = 4;
++      Py_XDECREF(__pyx_7); __pyx_7 = 0;
++      Py_XDECREF(__pyx_2); __pyx_2 = 0;
++      Py_XDECREF(__pyx_3); __pyx_3 = 0;
++      Py_XDECREF(__pyx_4); __pyx_4 = 0;
++      PyErr_Fetch(&__pyx_exc_type, &__pyx_exc_value, &__pyx_exc_tb);
++      __pyx_exc_lineno = __pyx_lineno;
++      goto __pyx_L4;
++    }
++    __pyx_L4:;
++    free(__pyx_v_events);
++    switch (__pyx_why) {
++      case 3: goto __pyx_L0;
++      case 4: {
++        PyErr_Restore(__pyx_exc_type, __pyx_exc_value, __pyx_exc_tb);
++        __pyx_lineno = __pyx_exc_lineno;
++        __pyx_exc_type = 0;
++        __pyx_exc_value = 0;
++        __pyx_exc_tb = 0;
++        goto __pyx_L1;
++      }
++    }
++  }
++
++  __pyx_r = Py_None; Py_INCREF(Py_None);
++  goto __pyx_L0;
++  __pyx_L1:;
++  Py_XDECREF(__pyx_2);
++  Py_XDECREF(__pyx_3);
++  Py_XDECREF(__pyx_4);
++  Py_XDECREF(__pyx_7);
++  __Pyx_AddTraceback("twisted.python._epoll.call_epoll_wait");
++  __pyx_r = 0;
++  __pyx_L0:;
++  Py_DECREF(__pyx_v_results);
++  Py_DECREF(__pyx_v_i);
++  return __pyx_r;
++}
++
++static int __pyx_f_7twisted_6python_6_epoll_5epoll___init__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static int __pyx_f_7twisted_6python_6_epoll_5epoll___init__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+   int __pyx_v_size;
+   int __pyx_r;
+   int __pyx_1;
+   PyObject *__pyx_2 = 0;
+   PyObject *__pyx_3 = 0;
+   PyObject *__pyx_4 = 0;
+-  PyObject *__pyx_5 = 0;
+   static char *__pyx_argnames[] = {"size",0};
+-  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "i", __pyx_argnames, &__pyx_v_size)) return -1;
++  __pyx_v_size = __pyx_d1;
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "|i", __pyx_argnames, &__pyx_v_size)) return -1;
+   Py_INCREF(__pyx_v_self);
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":77 */
+-  ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd = epoll_create(__pyx_v_size);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":118 */
++  ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd = epoll_create(__pyx_v_size);
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":78 */
+-  __pyx_1 = (((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd == (-1));
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":119 */
++  __pyx_1 = (((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd == (-1));
+   if (__pyx_1) {
+-
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":79 */
+-    __pyx_2 = __Pyx_GetName(__pyx_b, __pyx_n_IOError); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
+-    __pyx_3 = PyInt_FromLong(errno); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
+-    __pyx_4 = PyString_FromString(strerror(errno)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
+-    __pyx_5 = PyTuple_New(2); if (!__pyx_5) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
+-    PyTuple_SET_ITEM(__pyx_5, 0, __pyx_3);
+-    PyTuple_SET_ITEM(__pyx_5, 1, __pyx_4);
++    __pyx_2 = PyInt_FromLong(errno); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 120; goto __pyx_L1;}
++    __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 120; goto __pyx_L1;}
++    __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 120; goto __pyx_L1;}
++    PyTuple_SET_ITEM(__pyx_4, 0, __pyx_2);
++    PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++    __pyx_2 = 0;
+     __pyx_3 = 0;
+-    __pyx_4 = 0;
+-    __pyx_3 = PyObject_Call(__pyx_2, __pyx_5, 0); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
++    __pyx_2 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 120; goto __pyx_L1;}
++    Py_DECREF(__pyx_4); __pyx_4 = 0;
++    __Pyx_Raise(__pyx_2, 0, 0);
+     Py_DECREF(__pyx_2); __pyx_2 = 0;
+-    Py_DECREF(__pyx_5); __pyx_5 = 0;
+-    __Pyx_Raise(__pyx_3, 0, 0);
+-    Py_DECREF(__pyx_3); __pyx_3 = 0;
+-    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 79; goto __pyx_L1;}
++    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 120; goto __pyx_L1;}
+     goto __pyx_L2;
+   }
+   __pyx_L2:;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":80 */
+-  ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->initialized = 1;
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":121 */
++  ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->initialized = 1;
+ 
+   __pyx_r = 0;
+   goto __pyx_L0;
+@@ -138,81 +343,67 @@
+   Py_XDECREF(__pyx_2);
+   Py_XDECREF(__pyx_3);
+   Py_XDECREF(__pyx_4);
+-  Py_XDECREF(__pyx_5);
+-  __Pyx_AddTraceback("_epoll.epoll.__init__");
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.__init__");
+   __pyx_r = -1;
+   __pyx_L0:;
+   Py_DECREF(__pyx_v_self);
+   return __pyx_r;
+ }
+ 
+-static void __pyx_f_6_epoll_5epoll___dealloc__(PyObject *__pyx_v_self); /*proto*/
+-static void __pyx_f_6_epoll_5epoll___dealloc__(PyObject *__pyx_v_self) {
++static void __pyx_f_7twisted_6python_6_epoll_5epoll___dealloc__(PyObject *__pyx_v_self); /*proto*/
++static void __pyx_f_7twisted_6python_6_epoll_5epoll___dealloc__(PyObject *__pyx_v_self) {
+   int __pyx_1;
+   Py_INCREF(__pyx_v_self);
+-
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":83 */
+-  __pyx_1 = ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->initialized;
++  __pyx_1 = ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->initialized;
+   if (__pyx_1) {
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":84 */
+-    close(((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd);
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":125 */
++    close(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd);
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":85 */
+-    ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->initialized = 0;
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":126 */
++    ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->initialized = 0;
+     goto __pyx_L2;
+   }
+   __pyx_L2:;
+ 
+-  goto __pyx_L0;
+-  __pyx_L1:;
+-  __Pyx_AddTraceback("_epoll.epoll.__dealloc__");
+-  __pyx_L0:;
+   Py_DECREF(__pyx_v_self);
+ }
+ 
+-static PyObject *__pyx_f_6_epoll_5epoll_close(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+-static char __pyx_doc_6_epoll_5epoll_close[] = "\n        Close the epoll file descriptor.\n        ";
+-static PyObject *__pyx_f_6_epoll_5epoll_close(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_close(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_close[] = "\n        Close the epoll file descriptor.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_close(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+   PyObject *__pyx_r;
+   int __pyx_1;
+   PyObject *__pyx_2 = 0;
+   PyObject *__pyx_3 = 0;
+   PyObject *__pyx_4 = 0;
+-  PyObject *__pyx_5 = 0;
+   static char *__pyx_argnames[] = {0};
+   if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "", __pyx_argnames)) return 0;
+   Py_INCREF(__pyx_v_self);
+-
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":91 */
+-  __pyx_1 = ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->initialized;
++  __pyx_1 = ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->initialized;
+   if (__pyx_1) {
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":92 */
+-    __pyx_1 = (close(((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd) == (-1));
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":133 */
++    __pyx_1 = (close(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd) == (-1));
+     if (__pyx_1) {
+-
+-      /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":93 */
+-      __pyx_2 = __Pyx_GetName(__pyx_b, __pyx_n_IOError); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
+-      __pyx_3 = PyInt_FromLong(errno); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
+-      __pyx_4 = PyString_FromString(strerror(errno)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
+-      __pyx_5 = PyTuple_New(2); if (!__pyx_5) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
+-      PyTuple_SET_ITEM(__pyx_5, 0, __pyx_3);
+-      PyTuple_SET_ITEM(__pyx_5, 1, __pyx_4);
++      __pyx_2 = PyInt_FromLong(errno); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 134; goto __pyx_L1;}
++      __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 134; goto __pyx_L1;}
++      __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 134; goto __pyx_L1;}
++      PyTuple_SET_ITEM(__pyx_4, 0, __pyx_2);
++      PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++      __pyx_2 = 0;
+       __pyx_3 = 0;
+-      __pyx_4 = 0;
+-      __pyx_3 = PyObject_Call(__pyx_2, __pyx_5, 0); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
++      __pyx_2 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 134; goto __pyx_L1;}
++      Py_DECREF(__pyx_4); __pyx_4 = 0;
++      __Pyx_Raise(__pyx_2, 0, 0);
+       Py_DECREF(__pyx_2); __pyx_2 = 0;
+-      Py_DECREF(__pyx_5); __pyx_5 = 0;
+-      __Pyx_Raise(__pyx_3, 0, 0);
+-      Py_DECREF(__pyx_3); __pyx_3 = 0;
+-      {__pyx_filename = __pyx_f[0]; __pyx_lineno = 93; goto __pyx_L1;}
++      {__pyx_filename = __pyx_f[0]; __pyx_lineno = 134; goto __pyx_L1;}
+       goto __pyx_L3;
+     }
+     __pyx_L3:;
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":94 */
+-    ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->initialized = 0;
++    /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":135 */
++    ((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->initialized = 0;
+     goto __pyx_L2;
+   }
+   __pyx_L2:;
+@@ -223,25 +414,22 @@
+   Py_XDECREF(__pyx_2);
+   Py_XDECREF(__pyx_3);
+   Py_XDECREF(__pyx_4);
+-  Py_XDECREF(__pyx_5);
+-  __Pyx_AddTraceback("_epoll.epoll.close");
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.close");
+   __pyx_r = 0;
+   __pyx_L0:;
+   Py_DECREF(__pyx_v_self);
+   return __pyx_r;
+ }
+ 
+-static PyObject *__pyx_f_6_epoll_5epoll_fileno(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+-static char __pyx_doc_6_epoll_5epoll_fileno[] = "\n        Return the epoll file descriptor number.\n        ";
+-static PyObject *__pyx_f_6_epoll_5epoll_fileno(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_fileno(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_fileno[] = "\n        Return the epoll file descriptor number.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_fileno(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+   PyObject *__pyx_r;
+   PyObject *__pyx_1 = 0;
+   static char *__pyx_argnames[] = {0};
+   if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "", __pyx_argnames)) return 0;
+   Py_INCREF(__pyx_v_self);
+-
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":100 */
+-  __pyx_1 = PyInt_FromLong(((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 100; goto __pyx_L1;}
++  __pyx_1 = PyInt_FromLong(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 141; goto __pyx_L1;}
+   __pyx_r = __pyx_1;
+   __pyx_1 = 0;
+   goto __pyx_L0;
+@@ -250,59 +438,56 @@
+   goto __pyx_L0;
+   __pyx_L1:;
+   Py_XDECREF(__pyx_1);
+-  __Pyx_AddTraceback("_epoll.epoll.fileno");
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.fileno");
+   __pyx_r = 0;
+   __pyx_L0:;
+   Py_DECREF(__pyx_v_self);
+   return __pyx_r;
+ }
+ 
+-static PyObject *__pyx_f_6_epoll_5epoll__control(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+-static char __pyx_doc_6_epoll_5epoll__control[] = "\n        Modify the monitored state of a particular file descriptor.\n        \n        Wrap epoll_ctl(2).\n\n        @type op: C{int}\n        @param op: One of CTL_ADD, CTL_DEL, or CTL_MOD\n\n        @type fd: C{int}\n        @param fd: File descriptor to modify\n\n        @type events: C{int}\n        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.\n\n        @raise IOError: Raised if the underlying epoll_ctl() call fails.\n        ";
+-static PyObject *__pyx_f_6_epoll_5epoll__control(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+-  int __pyx_v_op;
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_register(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_register[] = "\n        Add (register) a file descriptor to be monitored by self.\n\n        This method is compatible with select.epoll.register in Python 2.6.\n\n        Wrap epoll_ctl(2).\n\n        @type fd: C{int}\n        @param fd: File descriptor to modify\n\n        @type events: C{int}\n        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.\n\n        @raise IOError: Raised if the underlying epoll_ctl() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_register(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+   int __pyx_v_fd;
+   int __pyx_v_events;
+   int __pyx_v_result;
+   struct epoll_event __pyx_v_evt;
+   PyObject *__pyx_r;
+-  int __pyx_1;
+-  PyObject *__pyx_2 = 0;
++  PyObject *__pyx_1 = 0;
++  int __pyx_2;
+   PyObject *__pyx_3 = 0;
+   PyObject *__pyx_4 = 0;
+-  PyObject *__pyx_5 = 0;
+-  static char *__pyx_argnames[] = {"op","fd","events",0};
+-  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "iii", __pyx_argnames, &__pyx_v_op, &__pyx_v_fd, &__pyx_v_events)) return 0;
++  static char *__pyx_argnames[] = {"fd","events",0};
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "ii", __pyx_argnames, &__pyx_v_fd, &__pyx_v_events)) return 0;
+   Py_INCREF(__pyx_v_self);
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":121 */
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":161 */
+   __pyx_v_evt.events = __pyx_v_events;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":122 */
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":162 */
+   __pyx_v_evt.data.fd = __pyx_v_fd;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":123 */
+-  __pyx_v_result = epoll_ctl(((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_v_op,__pyx_v_fd,(&__pyx_v_evt));
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":163 */
++  __pyx_1 = __Pyx_GetName(__pyx_m, __pyx_n_CTL_ADD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 163; goto __pyx_L1;}
++  __pyx_2 = PyInt_AsLong(__pyx_1); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 163; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_v_result = epoll_ctl(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_2,__pyx_v_fd,(&__pyx_v_evt));
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":124 */
+-  __pyx_1 = (__pyx_v_result == (-1));
+-  if (__pyx_1) {
+-
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":125 */
+-    __pyx_2 = __Pyx_GetName(__pyx_b, __pyx_n_IOError); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
+-    __pyx_3 = PyInt_FromLong(errno); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
+-    __pyx_4 = PyString_FromString(strerror(errno)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
+-    __pyx_5 = PyTuple_New(2); if (!__pyx_5) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
+-    PyTuple_SET_ITEM(__pyx_5, 0, __pyx_3);
+-    PyTuple_SET_ITEM(__pyx_5, 1, __pyx_4);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":164 */
++  __pyx_2 = (__pyx_v_result == (-1));
++  if (__pyx_2) {
++    __pyx_1 = PyInt_FromLong(errno); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
++    __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
++    __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
++    PyTuple_SET_ITEM(__pyx_4, 0, __pyx_1);
++    PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++    __pyx_1 = 0;
+     __pyx_3 = 0;
+-    __pyx_4 = 0;
+-    __pyx_3 = PyObject_Call(__pyx_2, __pyx_5, 0); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
+-    Py_DECREF(__pyx_2); __pyx_2 = 0;
+-    Py_DECREF(__pyx_5); __pyx_5 = 0;
+-    __Pyx_Raise(__pyx_3, 0, 0);
+-    Py_DECREF(__pyx_3); __pyx_3 = 0;
+-    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 125; goto __pyx_L1;}
++    __pyx_1 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
++    Py_DECREF(__pyx_4); __pyx_4 = 0;
++    __Pyx_Raise(__pyx_1, 0, 0);
++    Py_DECREF(__pyx_1); __pyx_1 = 0;
++    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
+     goto __pyx_L2;
+   }
+   __pyx_L2:;
+@@ -310,212 +495,256 @@
+   __pyx_r = Py_None; Py_INCREF(Py_None);
+   goto __pyx_L0;
+   __pyx_L1:;
+-  Py_XDECREF(__pyx_2);
++  Py_XDECREF(__pyx_1);
+   Py_XDECREF(__pyx_3);
+   Py_XDECREF(__pyx_4);
+-  Py_XDECREF(__pyx_5);
+-  __Pyx_AddTraceback("_epoll.epoll._control");
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.register");
+   __pyx_r = 0;
+   __pyx_L0:;
+   Py_DECREF(__pyx_v_self);
+   return __pyx_r;
+ }
+ 
+-static PyObject *__pyx_n_append;
+-
+-static PyObject *__pyx_f_6_epoll_5epoll_wait(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+-static char __pyx_doc_6_epoll_5epoll_wait[] = "\n        Wait for an I/O event, wrap epoll_wait(2).\n\n        @type maxevents: C{int}\n        @param maxevents: Maximum number of events returned.\n\n        @type timeout: C{int}\n        @param timeout: Maximum time waiting for events. 0 makes it return\n            immediately whereas -1 makes it wait indefinitely.\n        \n        @raise IOError: Raised if the underlying epoll_wait() call fails.\n        ";
+-static PyObject *__pyx_f_6_epoll_5epoll_wait(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+-  unsigned int __pyx_v_maxevents;
+-  int __pyx_v_timeout;
+-  struct epoll_event (*__pyx_v_events);
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_unregister(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_unregister[] = "\n        Remove (unregister) a file descriptor monitored by self.\n\n        This method is compatible with select.epoll.unregister in Python 2.6.\n\n        Wrap epoll_ctl(2).\n\n        @type fd: C{int}\n        @param fd: File descriptor to modify\n\n        @raise IOError: Raised if the underlying epoll_ctl() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_unregister(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++  int __pyx_v_fd;
+   int __pyx_v_result;
+-  int __pyx_v_nbytes;
+-  int __pyx_v_fd;
+-  PyThreadState (*__pyx_v__save);
+-  PyObject *__pyx_v_results;
+-  PyObject *__pyx_v_i;
++  struct epoll_event __pyx_v_evt;
+   PyObject *__pyx_r;
+-  int __pyx_1;
+-  PyObject *__pyx_2 = 0;
++  PyObject *__pyx_1 = 0;
++  int __pyx_2;
+   PyObject *__pyx_3 = 0;
+   PyObject *__pyx_4 = 0;
+-  PyObject *__pyx_5 = 0;
+-  long __pyx_6;
+-  Py_ssize_t __pyx_7;
+-  static char *__pyx_argnames[] = {"maxevents","timeout",0};
+-  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "Ii", __pyx_argnames, &__pyx_v_maxevents, &__pyx_v_timeout)) return 0;
++  static char *__pyx_argnames[] = {"fd",0};
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "i", __pyx_argnames, &__pyx_v_fd)) return 0;
+   Py_INCREF(__pyx_v_self);
+-  __pyx_v_results = Py_None; Py_INCREF(Py_None);
+-  __pyx_v_i = Py_None; Py_INCREF(Py_None);
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":146 */
+-  __pyx_v_nbytes = ((sizeof(struct epoll_event )) * __pyx_v_maxevents);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":183 */
++  __pyx_v_evt.data.fd = __pyx_v_fd;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":147 */
+-  __pyx_v_events = ((struct epoll_event (*))malloc(__pyx_v_nbytes));
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":184 */
++  __pyx_1 = __Pyx_GetName(__pyx_m, __pyx_n_CTL_DEL); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 184; goto __pyx_L1;}
++  __pyx_2 = PyInt_AsLong(__pyx_1); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 184; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_v_result = epoll_ctl(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_2,__pyx_v_fd,(&__pyx_v_evt));
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":148 */
+-  memset(__pyx_v_events,0,__pyx_v_nbytes);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":185 */
++  __pyx_2 = (__pyx_v_result == (-1));
++  if (__pyx_2) {
++    __pyx_1 = PyInt_FromLong(errno); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 186; goto __pyx_L1;}
++    __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 186; goto __pyx_L1;}
++    __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 186; goto __pyx_L1;}
++    PyTuple_SET_ITEM(__pyx_4, 0, __pyx_1);
++    PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++    __pyx_1 = 0;
++    __pyx_3 = 0;
++    __pyx_1 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 186; goto __pyx_L1;}
++    Py_DECREF(__pyx_4); __pyx_4 = 0;
++    __Pyx_Raise(__pyx_1, 0, 0);
++    Py_DECREF(__pyx_1); __pyx_1 = 0;
++    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 186; goto __pyx_L1;}
++    goto __pyx_L2;
++  }
++  __pyx_L2:;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":149 */
+-  /*try:*/ {
++  __pyx_r = Py_None; Py_INCREF(Py_None);
++  goto __pyx_L0;
++  __pyx_L1:;
++  Py_XDECREF(__pyx_1);
++  Py_XDECREF(__pyx_3);
++  Py_XDECREF(__pyx_4);
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.unregister");
++  __pyx_r = 0;
++  __pyx_L0:;
++  Py_DECREF(__pyx_v_self);
++  return __pyx_r;
++}
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":150 */
+-    __pyx_v_fd = ((struct __pyx_obj_6_epoll_epoll *)__pyx_v_self)->fd;
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_modify(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_modify[] = "\n        Modify the modified state of a file descriptor monitored by self.\n\n        This method is compatible with select.epoll.modify in Python 2.6.\n\n        Wrap epoll_ctl(2).\n\n        @type fd: C{int}\n        @param fd: File descriptor to modify\n\n        @type events: C{int}\n        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.\n\n        @raise IOError: Raised if the underlying epoll_ctl() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_modify(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++  int __pyx_v_fd;
++  int __pyx_v_events;
++  int __pyx_v_result;
++  struct epoll_event __pyx_v_evt;
++  PyObject *__pyx_r;
++  PyObject *__pyx_1 = 0;
++  int __pyx_2;
++  PyObject *__pyx_3 = 0;
++  PyObject *__pyx_4 = 0;
++  static char *__pyx_argnames[] = {"fd","events",0};
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "ii", __pyx_argnames, &__pyx_v_fd, &__pyx_v_events)) return 0;
++  Py_INCREF(__pyx_v_self);
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":152 */
+-    __pyx_v__save = PyEval_SaveThread();
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":206 */
++  __pyx_v_evt.events = __pyx_v_events;
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":153 */
+-    __pyx_v_result = epoll_wait(__pyx_v_fd,__pyx_v_events,__pyx_v_maxevents,__pyx_v_timeout);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":207 */
++  __pyx_v_evt.data.fd = __pyx_v_fd;
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":154 */
+-    PyEval_RestoreThread(__pyx_v__save);
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":208 */
++  __pyx_1 = __Pyx_GetName(__pyx_m, __pyx_n_CTL_MOD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 208; goto __pyx_L1;}
++  __pyx_2 = PyInt_AsLong(__pyx_1); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 208; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_v_result = epoll_ctl(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_2,__pyx_v_fd,(&__pyx_v_evt));
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":156 */
+-    __pyx_1 = (__pyx_v_result == (-1));
+-    if (__pyx_1) {
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":209 */
++  __pyx_2 = (__pyx_v_result == (-1));
++  if (__pyx_2) {
++    __pyx_1 = PyInt_FromLong(errno); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 210; goto __pyx_L1;}
++    __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 210; goto __pyx_L1;}
++    __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 210; goto __pyx_L1;}
++    PyTuple_SET_ITEM(__pyx_4, 0, __pyx_1);
++    PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++    __pyx_1 = 0;
++    __pyx_3 = 0;
++    __pyx_1 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 210; goto __pyx_L1;}
++    Py_DECREF(__pyx_4); __pyx_4 = 0;
++    __Pyx_Raise(__pyx_1, 0, 0);
++    Py_DECREF(__pyx_1); __pyx_1 = 0;
++    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 210; goto __pyx_L1;}
++    goto __pyx_L2;
++  }
++  __pyx_L2:;
+ 
+-      /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":157 */
+-      __pyx_2 = __Pyx_GetName(__pyx_b, __pyx_n_IOError); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      __pyx_3 = PyInt_FromLong(errno); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      __pyx_4 = PyString_FromString(strerror(errno)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      __pyx_5 = PyTuple_New(2); if (!__pyx_5) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      PyTuple_SET_ITEM(__pyx_5, 0, __pyx_3);
+-      PyTuple_SET_ITEM(__pyx_5, 1, __pyx_4);
+-      __pyx_3 = 0;
+-      __pyx_4 = 0;
+-      __pyx_3 = PyObject_Call(__pyx_2, __pyx_5, 0); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      Py_DECREF(__pyx_2); __pyx_2 = 0;
+-      Py_DECREF(__pyx_5); __pyx_5 = 0;
+-      __Pyx_Raise(__pyx_3, 0, 0);
+-      Py_DECREF(__pyx_3); __pyx_3 = 0;
+-      {__pyx_filename = __pyx_f[0]; __pyx_lineno = 157; goto __pyx_L3;}
+-      goto __pyx_L5;
+-    }
+-    __pyx_L5:;
++  __pyx_r = Py_None; Py_INCREF(Py_None);
++  goto __pyx_L0;
++  __pyx_L1:;
++  Py_XDECREF(__pyx_1);
++  Py_XDECREF(__pyx_3);
++  Py_XDECREF(__pyx_4);
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.modify");
++  __pyx_r = 0;
++  __pyx_L0:;
++  Py_DECREF(__pyx_v_self);
++  return __pyx_r;
++}
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":158 */
+-    __pyx_4 = PyList_New(0); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 158; goto __pyx_L3;}
+-    Py_DECREF(__pyx_v_results);
+-    __pyx_v_results = __pyx_4;
+-    __pyx_4 = 0;
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll__control(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll__control[] = "\n        Modify the monitored state of a particular file descriptor.\n        \n        Wrap epoll_ctl(2).\n\n        @type op: C{int}\n        @param op: One of CTL_ADD, CTL_DEL, or CTL_MOD\n\n        @type fd: C{int}\n        @param fd: File descriptor to modify\n\n        @type events: C{int}\n        @param events: A bit set of IN, OUT, PRI, ERR, HUP, and ET.\n\n        @raise IOError: Raised if the underlying epoll_ctl() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll__control(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++  int __pyx_v_op;
++  int __pyx_v_fd;
++  int __pyx_v_events;
++  int __pyx_v_result;
++  struct epoll_event __pyx_v_evt;
++  PyObject *__pyx_r;
++  int __pyx_1;
++  PyObject *__pyx_2 = 0;
++  PyObject *__pyx_3 = 0;
++  PyObject *__pyx_4 = 0;
++  static char *__pyx_argnames[] = {"op","fd","events",0};
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "iii", __pyx_argnames, &__pyx_v_op, &__pyx_v_fd, &__pyx_v_events)) return 0;
++  Py_INCREF(__pyx_v_self);
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":159 */
+-    for (__pyx_6 = 0; __pyx_6 < __pyx_v_result; ++__pyx_6) {
+-      __pyx_2 = PyInt_FromLong(__pyx_6); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 159; goto __pyx_L3;}
+-      Py_DECREF(__pyx_v_i);
+-      __pyx_v_i = __pyx_2;
+-      __pyx_2 = 0;
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":231 */
++  __pyx_v_evt.events = __pyx_v_events;
+ 
+-      /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":160 */
+-      __pyx_5 = PyObject_GetAttr(__pyx_v_results, __pyx_n_append); if (!__pyx_5) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      __pyx_7 = PyInt_AsSsize_t(__pyx_v_i); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      __pyx_3 = PyInt_FromLong((__pyx_v_events[__pyx_7]).data.fd); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      __pyx_7 = PyInt_AsSsize_t(__pyx_v_i); if (PyErr_Occurred()) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      __pyx_4 = PyInt_FromLong(((int )(__pyx_v_events[__pyx_7]).events)); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      __pyx_2 = PyTuple_New(2); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      PyTuple_SET_ITEM(__pyx_2, 0, __pyx_3);
+-      PyTuple_SET_ITEM(__pyx_2, 1, __pyx_4);
+-      __pyx_3 = 0;
+-      __pyx_4 = 0;
+-      __pyx_3 = PyTuple_New(1); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      PyTuple_SET_ITEM(__pyx_3, 0, __pyx_2);
+-      __pyx_2 = 0;
+-      __pyx_4 = PyObject_Call(__pyx_5, __pyx_3, 0); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 160; goto __pyx_L3;}
+-      Py_DECREF(__pyx_5); __pyx_5 = 0;
+-      Py_DECREF(__pyx_3); __pyx_3 = 0;
+-      Py_DECREF(__pyx_4); __pyx_4 = 0;
+-      __pyx_L6:;
+-    }
+-    __pyx_L7:;
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":232 */
++  __pyx_v_evt.data.fd = __pyx_v_fd;
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":161 */
+-    Py_INCREF(__pyx_v_results);
+-    __pyx_r = __pyx_v_results;
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":233 */
++  __pyx_v_result = epoll_ctl(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_v_op,__pyx_v_fd,(&__pyx_v_evt));
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":234 */
++  __pyx_1 = (__pyx_v_result == (-1));
++  if (__pyx_1) {
++    __pyx_2 = PyInt_FromLong(errno); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 235; goto __pyx_L1;}
++    __pyx_3 = PyString_FromString(strerror(errno)); if (!__pyx_3) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 235; goto __pyx_L1;}
++    __pyx_4 = PyTuple_New(2); if (!__pyx_4) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 235; goto __pyx_L1;}
++    PyTuple_SET_ITEM(__pyx_4, 0, __pyx_2);
++    PyTuple_SET_ITEM(__pyx_4, 1, __pyx_3);
++    __pyx_2 = 0;
++    __pyx_3 = 0;
++    __pyx_2 = PyObject_CallObject(PyExc_IOError, __pyx_4); if (!__pyx_2) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 235; goto __pyx_L1;}
++    Py_DECREF(__pyx_4); __pyx_4 = 0;
++    __Pyx_Raise(__pyx_2, 0, 0);
++    Py_DECREF(__pyx_2); __pyx_2 = 0;
++    {__pyx_filename = __pyx_f[0]; __pyx_lineno = 235; goto __pyx_L1;}
+     goto __pyx_L2;
+   }
+-  /*finally:*/ {
+-    int __pyx_why;
+-    __pyx_why = 0; goto __pyx_L4;
+-    __pyx_L2: __pyx_why = 3; goto __pyx_L4;
+-    __pyx_L3: {
+-      __pyx_why = 4;
+-      Py_XDECREF(__pyx_2); __pyx_2 = 0;
+-      Py_XDECREF(__pyx_5); __pyx_5 = 0;
+-      Py_XDECREF(__pyx_3); __pyx_3 = 0;
+-      Py_XDECREF(__pyx_4); __pyx_4 = 0;
+-      PyErr_Fetch(&__pyx_2, &__pyx_5, &__pyx_3);
+-      __pyx_1 = __pyx_lineno;
+-      goto __pyx_L4;
+-    }
+-    __pyx_L4:;
++  __pyx_L2:;
+ 
+-    /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":163 */
+-    free(__pyx_v_events);
+-    switch (__pyx_why) {
+-      case 3: goto __pyx_L0;
+-      case 4: {
+-        PyErr_Restore(__pyx_2, __pyx_5, __pyx_3);
+-        __pyx_lineno = __pyx_1;
+-        __pyx_2 = 0;
+-        __pyx_5 = 0;
+-        __pyx_3 = 0;
+-        goto __pyx_L1;
+-      }
+-    }
+-  }
+-
+   __pyx_r = Py_None; Py_INCREF(Py_None);
+   goto __pyx_L0;
+   __pyx_L1:;
+   Py_XDECREF(__pyx_2);
+   Py_XDECREF(__pyx_3);
+   Py_XDECREF(__pyx_4);
+-  Py_XDECREF(__pyx_5);
+-  __Pyx_AddTraceback("_epoll.epoll.wait");
++  __Pyx_AddTraceback("twisted.python._epoll.epoll._control");
+   __pyx_r = 0;
+   __pyx_L0:;
+-  Py_DECREF(__pyx_v_results);
+-  Py_DECREF(__pyx_v_i);
+   Py_DECREF(__pyx_v_self);
+   return __pyx_r;
+ }
+ 
+-static __Pyx_InternTabEntry __pyx_intern_tab[] = {
+-  {&__pyx_n_CTL_ADD, "CTL_ADD"},
+-  {&__pyx_n_CTL_DEL, "CTL_DEL"},
+-  {&__pyx_n_CTL_MOD, "CTL_MOD"},
+-  {&__pyx_n_ERR, "ERR"},
+-  {&__pyx_n_ET, "ET"},
+-  {&__pyx_n_HUP, "HUP"},
+-  {&__pyx_n_IN, "IN"},
+-  {&__pyx_n_IOError, "IOError"},
+-  {&__pyx_n_MSG, "MSG"},
+-  {&__pyx_n_OUT, "OUT"},
+-  {&__pyx_n_PRI, "PRI"},
+-  {&__pyx_n_RDBAND, "RDBAND"},
+-  {&__pyx_n_RDNORM, "RDNORM"},
+-  {&__pyx_n_WRBAND, "WRBAND"},
+-  {&__pyx_n_WRNORM, "WRNORM"},
+-  {&__pyx_n_append, "append"},
+-  {0, 0}
+-};
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_wait(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_wait[] = "\n        Wait for an I/O event, wrap epoll_wait(2).\n\n        @type maxevents: C{int}\n        @param maxevents: Maximum number of events returned.\n\n        @type timeout: C{int}\n        @param timeout: Maximum time in milliseconds waiting for events. 0\n            makes it return immediately whereas -1 makes it wait indefinitely.\n        \n        @raise IOError: Raised if the underlying epoll_wait() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_wait(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++  unsigned int __pyx_v_maxevents;
++  int __pyx_v_timeout;
++  PyObject *__pyx_r;
++  PyObject *__pyx_1 = 0;
++  static char *__pyx_argnames[] = {"maxevents","timeout",0};
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "Ii", __pyx_argnames, &__pyx_v_maxevents, &__pyx_v_timeout)) return 0;
++  Py_INCREF(__pyx_v_self);
++  __pyx_1 = __pyx_f_7twisted_6python_6_epoll_call_epoll_wait(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_v_maxevents,__pyx_v_timeout); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 250; goto __pyx_L1;}
++  __pyx_r = __pyx_1;
++  __pyx_1 = 0;
++  goto __pyx_L0;
+ 
+-static PyObject *__pyx_tp_new_6_epoll_epoll(PyTypeObject *t, PyObject *a, PyObject *k) {
++  __pyx_r = Py_None; Py_INCREF(Py_None);
++  goto __pyx_L0;
++  __pyx_L1:;
++  Py_XDECREF(__pyx_1);
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.wait");
++  __pyx_r = 0;
++  __pyx_L0:;
++  Py_DECREF(__pyx_v_self);
++  return __pyx_r;
++}
++
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_poll(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
++static char __pyx_doc_7twisted_6python_6_epoll_5epoll_poll[] = "\n        Wait for an I/O event, wrap epoll_wait(2).\n\n        This method is compatible with select.epoll.poll in Python 2.6.\n\n        @type maxevents: C{int}\n        @param maxevents: Maximum number of events returned.\n\n        @type timeout: C{int}\n        @param timeout: Maximum time waiting for events. 0 makes it return\n            immediately whereas -1 makes it wait indefinitely.\n        \n        @raise IOError: Raised if the underlying epoll_wait() call fails.\n        ";
++static PyObject *__pyx_f_7twisted_6python_6_epoll_5epoll_poll(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
++  float __pyx_v_timeout;
++  unsigned int __pyx_v_maxevents;
++  PyObject *__pyx_r;
++  PyObject *__pyx_1 = 0;
++  static char *__pyx_argnames[] = {"timeout","maxevents",0};
++  __pyx_v_timeout = __pyx_d2;
++  __pyx_v_maxevents = __pyx_d3;
++  if (!PyArg_ParseTupleAndKeywords(__pyx_args, __pyx_kwds, "|fI", __pyx_argnames, &__pyx_v_timeout, &__pyx_v_maxevents)) return 0;
++  Py_INCREF(__pyx_v_self);
++  __pyx_1 = __pyx_f_7twisted_6python_6_epoll_call_epoll_wait(((struct __pyx_obj_7twisted_6python_6_epoll_epoll *)__pyx_v_self)->fd,__pyx_v_maxevents,((int)(__pyx_v_timeout * 1000.0))); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 267; goto __pyx_L1;}
++  __pyx_r = __pyx_1;
++  __pyx_1 = 0;
++  goto __pyx_L0;
++
++  __pyx_r = Py_None; Py_INCREF(Py_None);
++  goto __pyx_L0;
++  __pyx_L1:;
++  Py_XDECREF(__pyx_1);
++  __Pyx_AddTraceback("twisted.python._epoll.epoll.poll");
++  __pyx_r = 0;
++  __pyx_L0:;
++  Py_DECREF(__pyx_v_self);
++  return __pyx_r;
++}
++
++static PyObject *__pyx_tp_new_7twisted_6python_6_epoll_epoll(PyTypeObject *t, PyObject *a, PyObject *k) {
+   PyObject *o = (*t->tp_alloc)(t, 0);
+-  struct __pyx_obj_6_epoll_epoll *p = (struct __pyx_obj_6_epoll_epoll *)o;
++  if (!o) return 0;
+   return o;
+ }
+ 
+-static void __pyx_tp_dealloc_6_epoll_epoll(PyObject *o) {
+-  struct __pyx_obj_6_epoll_epoll *p = (struct __pyx_obj_6_epoll_epoll *)o;
++static void __pyx_tp_dealloc_7twisted_6python_6_epoll_epoll(PyObject *o) {
+   {
+     PyObject *etype, *eval, *etb;
+     PyErr_Fetch(&etype, &eval, &etb);
+     ++o->ob_refcnt;
+-    __pyx_f_6_epoll_5epoll___dealloc__(o);
++    __pyx_f_7twisted_6python_6_epoll_5epoll___dealloc__(o);
+     if (PyErr_Occurred()) PyErr_WriteUnraisable(o);
+     --o->ob_refcnt;
+     PyErr_Restore(etype, eval, etb);
+@@ -523,22 +752,15 @@
+   (*o->ob_type->tp_free)(o);
+ }
+ 
+-static int __pyx_tp_traverse_6_epoll_epoll(PyObject *o, visitproc v, void *a) {
+-  int e;
+-  struct __pyx_obj_6_epoll_epoll *p = (struct __pyx_obj_6_epoll_epoll *)o;
+-  return 0;
+-}
+-
+-static int __pyx_tp_clear_6_epoll_epoll(PyObject *o) {
+-  struct __pyx_obj_6_epoll_epoll *p = (struct __pyx_obj_6_epoll_epoll *)o;
+-  return 0;
+-}
+-
+-static struct PyMethodDef __pyx_methods_6_epoll_epoll[] = {
+-  {"close", (PyCFunction)__pyx_f_6_epoll_5epoll_close, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6_epoll_5epoll_close},
+-  {"fileno", (PyCFunction)__pyx_f_6_epoll_5epoll_fileno, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6_epoll_5epoll_fileno},
+-  {"_control", (PyCFunction)__pyx_f_6_epoll_5epoll__control, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6_epoll_5epoll__control},
+-  {"wait", (PyCFunction)__pyx_f_6_epoll_5epoll_wait, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6_epoll_5epoll_wait},
++static struct PyMethodDef __pyx_methods_7twisted_6python_6_epoll_epoll[] = {
++  {"close", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_close, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_close},
++  {"fileno", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_fileno, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_fileno},
++  {"register", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_register, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_register},
++  {"unregister", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_unregister, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_unregister},
++  {"modify", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_modify, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_modify},
++  {"_control", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll__control, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll__control},
++  {"wait", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_wait, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_wait},
++  {"poll", (PyCFunction)__pyx_f_7twisted_6python_6_epoll_5epoll_poll, METH_VARARGS|METH_KEYWORDS, __pyx_doc_7twisted_6python_6_epoll_5epoll_poll},
+   {0, 0, 0, 0}
+ };
+ 
+@@ -581,6 +803,9 @@
+   0, /*nb_true_divide*/
+   0, /*nb_inplace_floor_divide*/
+   0, /*nb_inplace_true_divide*/
++  #if Py_TPFLAGS_DEFAULT & Py_TPFLAGS_HAVE_INDEX
++  0, /*nb_index*/
++  #endif
+ };
+ 
+ static PySequenceMethods __pyx_tp_as_sequence_epoll = {
+@@ -609,13 +834,13 @@
+   0, /*bf_getcharbuffer*/
+ };
+ 
+-PyTypeObject __pyx_type_6_epoll_epoll = {
++PyTypeObject __pyx_type_7twisted_6python_6_epoll_epoll = {
+   PyObject_HEAD_INIT(0)
+   0, /*ob_size*/
+-  "_epoll.epoll", /*tp_name*/
+-  sizeof(struct __pyx_obj_6_epoll_epoll), /*tp_basicsize*/
++  "twisted.python._epoll.epoll", /*tp_name*/
++  sizeof(struct __pyx_obj_7twisted_6python_6_epoll_epoll), /*tp_basicsize*/
+   0, /*tp_itemsize*/
+-  __pyx_tp_dealloc_6_epoll_epoll, /*tp_dealloc*/
++  __pyx_tp_dealloc_7twisted_6python_6_epoll_epoll, /*tp_dealloc*/
+   0, /*tp_print*/
+   0, /*tp_getattr*/
+   0, /*tp_setattr*/
+@@ -630,15 +855,15 @@
+   0, /*tp_getattro*/
+   0, /*tp_setattro*/
+   &__pyx_tp_as_buffer_epoll, /*tp_as_buffer*/
+-  Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_BASETYPE|Py_TPFLAGS_HAVE_GC, /*tp_flags*/
++  Py_TPFLAGS_DEFAULT|Py_TPFLAGS_CHECKTYPES|Py_TPFLAGS_BASETYPE, /*tp_flags*/
+   "\n    Represent a set of file descriptors being monitored for events.\n    ", /*tp_doc*/
+-  __pyx_tp_traverse_6_epoll_epoll, /*tp_traverse*/
+-  __pyx_tp_clear_6_epoll_epoll, /*tp_clear*/
++  0, /*tp_traverse*/
++  0, /*tp_clear*/
+   0, /*tp_richcompare*/
+   0, /*tp_weaklistoffset*/
+   0, /*tp_iter*/
+   0, /*tp_iternext*/
+-  __pyx_methods_6_epoll_epoll, /*tp_methods*/
++  __pyx_methods_7twisted_6python_6_epoll_epoll, /*tp_methods*/
+   0, /*tp_members*/
+   0, /*tp_getset*/
+   0, /*tp_base*/
+@@ -646,9 +871,9 @@
+   0, /*tp_descr_get*/
+   0, /*tp_descr_set*/
+   0, /*tp_dictoffset*/
+-  __pyx_f_6_epoll_5epoll___init__, /*tp_init*/
++  __pyx_f_7twisted_6python_6_epoll_5epoll___init__, /*tp_init*/
+   0, /*tp_alloc*/
+-  __pyx_tp_new_6_epoll_epoll, /*tp_new*/
++  __pyx_tp_new_7twisted_6python_6_epoll_epoll, /*tp_new*/
+   0, /*tp_free*/
+   0, /*tp_is_gc*/
+   0, /*tp_bases*/
+@@ -670,87 +895,128 @@
+   __pyx_init_filenames();
+   __pyx_m = Py_InitModule4("_epoll", __pyx_methods, __pyx_mdoc, 0, PYTHON_API_VERSION);
+   if (!__pyx_m) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 4; goto __pyx_L1;};
++  Py_INCREF(__pyx_m);
+   __pyx_b = PyImport_AddModule("__builtin__");
+   if (!__pyx_b) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 4; goto __pyx_L1;};
+   if (PyObject_SetAttrString(__pyx_m, "__builtins__", __pyx_b) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 4; goto __pyx_L1;};
+-  if (__Pyx_InternStrings(__pyx_intern_tab) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 4; goto __pyx_L1;};
+-  if (PyType_Ready(&__pyx_type_6_epoll_epoll) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 68; goto __pyx_L1;}
+-  if (PyObject_SetAttrString(__pyx_m, "epoll", (PyObject *)&__pyx_type_6_epoll_epoll) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 68; goto __pyx_L1;}
+-  __pyx_ptype_6_epoll_epoll = &__pyx_type_6_epoll_epoll;
++  if (__Pyx_InitStrings(__pyx_string_tab) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 4; goto __pyx_L1;};
++  if (PyType_Ready(&__pyx_type_7twisted_6python_6_epoll_epoll) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 106; goto __pyx_L1;}
++  if (PyObject_SetAttrString(__pyx_m, "epoll", (PyObject *)&__pyx_type_7twisted_6python_6_epoll_epoll) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 106; goto __pyx_L1;}
++  __pyx_ptype_7twisted_6python_6_epoll_epoll = &__pyx_type_7twisted_6python_6_epoll_epoll;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":165 */
+-  __pyx_1 = PyInt_FromLong(EPOLL_CTL_ADD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_ADD, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 165; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":114 */
++  __pyx_d1 = 1023;
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":252 */
++  __pyx_d2 = (-1);
++  __pyx_d3 = 1024;
++
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":270 */
++  __pyx_1 = PyInt_FromLong(EPOLL_CTL_ADD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 270; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_ADD, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 270; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":166 */
+-  __pyx_1 = PyInt_FromLong(EPOLL_CTL_DEL); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 166; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_DEL, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 166; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":271 */
++  __pyx_1 = PyInt_FromLong(EPOLL_CTL_DEL); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 271; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_DEL, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 271; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":167 */
+-  __pyx_1 = PyInt_FromLong(EPOLL_CTL_MOD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 167; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_MOD, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 167; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":272 */
++  __pyx_1 = PyInt_FromLong(EPOLL_CTL_MOD); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 272; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_CTL_MOD, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 272; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":169 */
+-  __pyx_1 = PyInt_FromLong(EPOLLIN); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 169; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_IN, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 169; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":274 */
++  __pyx_1 = PyInt_FromLong(EPOLLIN); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 274; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_IN, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 274; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLIN); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 274; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLIN, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 274; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":170 */
+-  __pyx_1 = PyInt_FromLong(EPOLLOUT); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 170; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_OUT, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 170; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":275 */
++  __pyx_1 = PyInt_FromLong(EPOLLOUT); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 275; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_OUT, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 275; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLOUT); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 275; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLOUT, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 275; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":171 */
+-  __pyx_1 = PyInt_FromLong(EPOLLPRI); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 171; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_PRI, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 171; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":276 */
++  __pyx_1 = PyInt_FromLong(EPOLLPRI); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 276; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_PRI, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 276; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLPRI); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 276; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLPRI, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 276; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":172 */
+-  __pyx_1 = PyInt_FromLong(EPOLLERR); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 172; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_ERR, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 172; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":277 */
++  __pyx_1 = PyInt_FromLong(EPOLLERR); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 277; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_ERR, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 277; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLERR); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 277; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLERR, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 277; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":173 */
+-  __pyx_1 = PyInt_FromLong(EPOLLHUP); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 173; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_HUP, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 173; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":278 */
++  __pyx_1 = PyInt_FromLong(EPOLLHUP); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 278; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_HUP, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 278; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLHUP); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 278; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLHUP, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 278; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":174 */
+-  __pyx_1 = PyInt_FromLong(EPOLLET); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 174; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_ET, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 174; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":279 */
++  __pyx_1 = PyInt_FromLong(EPOLLET); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 279; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_ET, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 279; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLET); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 279; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLET, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 279; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":176 */
+-  __pyx_1 = PyInt_FromLong(EPOLLRDNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 176; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_RDNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 176; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":281 */
++  __pyx_1 = PyInt_FromLong(EPOLLRDNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 281; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_RDNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 281; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLRDNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 281; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLRDNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 281; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":177 */
+-  __pyx_1 = PyInt_FromLong(EPOLLRDBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 177; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_RDBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 177; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":282 */
++  __pyx_1 = PyInt_FromLong(EPOLLRDBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 282; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_RDBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 282; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLRDBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 282; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLRDBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 282; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":178 */
+-  __pyx_1 = PyInt_FromLong(EPOLLWRNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 178; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_WRNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 178; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":283 */
++  __pyx_1 = PyInt_FromLong(EPOLLWRNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 283; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_WRNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 283; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLWRNORM); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 283; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLWRNORM, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 283; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":179 */
+-  __pyx_1 = PyInt_FromLong(EPOLLWRBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 179; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_WRBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 179; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":284 */
++  __pyx_1 = PyInt_FromLong(EPOLLWRBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 284; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_WRBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 284; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLWRBAND); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 284; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLWRBAND, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 284; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+ 
+-  /* "/home/exarkun/Projects/Twisted/branches/epollreactor-1953-2/twisted/python/_epoll.pyx":180 */
+-  __pyx_1 = PyInt_FromLong(EPOLLMSG); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 180; goto __pyx_L1;}
+-  if (PyObject_SetAttr(__pyx_m, __pyx_n_MSG, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 180; goto __pyx_L1;}
++  /* "/usr/local/google/twisted/twisted/python/_epoll.pyx":285 */
++  __pyx_1 = PyInt_FromLong(EPOLLMSG); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 285; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_MSG, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 285; goto __pyx_L1;}
+   Py_DECREF(__pyx_1); __pyx_1 = 0;
++  __pyx_1 = PyInt_FromLong(EPOLLMSG); if (!__pyx_1) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 285; goto __pyx_L1;}
++  if (PyObject_SetAttr(__pyx_m, __pyx_n_EPOLLMSG, __pyx_1) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 285; goto __pyx_L1;}
++  Py_DECREF(__pyx_1); __pyx_1 = 0;
+   return;
+   __pyx_L1:;
+   Py_XDECREF(__pyx_1);
+-  __Pyx_AddTraceback("_epoll");
++  __Pyx_AddTraceback("twisted.python._epoll");
+ }
+ 
+ static char *__pyx_filenames[] = {
+@@ -763,90 +1029,53 @@
+   __pyx_f = __pyx_filenames;
+ }
+ 
+-static PyObject *__Pyx_GetName(PyObject *dict, PyObject *name) {
+-    PyObject *result;
+-    result = PyObject_GetAttr(dict, name);
+-    if (!result)
+-        PyErr_SetObject(PyExc_NameError, name);
+-    return result;
+-}
+-
+ static void __Pyx_Raise(PyObject *type, PyObject *value, PyObject *tb) {
++    if (value == Py_None)
++        value = NULL;
++    if (tb == Py_None)
++        tb = NULL;
+     Py_XINCREF(type);
+     Py_XINCREF(value);
+     Py_XINCREF(tb);
+-    /* First, check the traceback argument, replacing None with NULL. */
+-    if (tb == Py_None) {
+-        Py_DECREF(tb);
+-        tb = 0;
+-    }
+-    else if (tb != NULL && !PyTraceBack_Check(tb)) {
++    if (tb && !PyTraceBack_Check(tb)) {
+         PyErr_SetString(PyExc_TypeError,
+             "raise: arg 3 must be a traceback or None");
+         goto raise_error;
+     }
+-    /* Next, replace a missing value with None */
+-    if (value == NULL) {
+-        value = Py_None;
+-        Py_INCREF(value);
+-    }
+-    /* Next, repeatedly, replace a tuple exception with its first item */
+-    while (PyTuple_Check(type) && PyTuple_Size(type) > 0) {
+-        PyObject *tmp = type;
+-        type = PyTuple_GET_ITEM(type, 0);
+-        Py_INCREF(type);
+-        Py_DECREF(tmp);
+-    }
+-    if (PyString_CheckExact(type)) {
+-        /* Raising builtin string is deprecated but still allowed --
+-         * do nothing.  Raising an instance of a new-style str
+-         * subclass is right out. */
+-        if (PyErr_Warn(PyExc_DeprecationWarning,
+-                   "raising a string exception is deprecated"))
+-                goto raise_error;
+-    }
+-    else if (PyType_Check(type) || PyClass_Check(type))
+-        ; /* PyErr_NormalizeException(&type, &value, &tb); */
+-    else if (PyInstance_Check(type)) {
++    #if PY_VERSION_HEX < 0x02050000
++    if (!PyClass_Check(type))
++    #else
++    if (!PyType_Check(type))
++    #endif
++    {
+         /* Raising an instance.  The value should be a dummy. */
+-        if (value != Py_None) {
++        if (value) {
+             PyErr_SetString(PyExc_TypeError,
+-              "instance exception may not have a separate value");
++                "instance exception may not have a separate value");
+             goto raise_error;
+         }
+-        else {
+-            /* Normalize to raise <class>, <instance> */
+-            Py_DECREF(value);
+-            value = type;
+-            type = (PyObject*) ((PyInstanceObject*)type)->in_class;
++        /* Normalize to raise <class>, <instance> */
++        value = type;
++        #if PY_VERSION_HEX < 0x02050000
++            if (PyInstance_Check(type)) {
++                type = (PyObject*) ((PyInstanceObject*)type)->in_class;
++                Py_INCREF(type);
++            }
++            else {
++                PyErr_SetString(PyExc_TypeError,
++                    "raise: exception must be an old-style class or instance");
++                goto raise_error;
++            }
++        #else
++            type = (PyObject*) type->ob_type;
+             Py_INCREF(type);
+-        }
+-    }
+-    else if (PyType_IsSubtype(type->ob_type, (PyTypeObject*)PyExc_Exception)) {
+-        /* Raising a new-style object (in Py2.5).
+-           The value should be a dummy. */
+-        if (value != Py_None) {
++            if (!PyType_IsSubtype((PyTypeObject *)type, (PyTypeObject *)PyExc_BaseException)) {
+                 PyErr_SetString(PyExc_TypeError,
+-                  "instance exception may not have a separate value");
++                    "raise: exception class must be a subclass of BaseException");
+                 goto raise_error;
+-        }
+-        else {
+-                /* Normalize to raise <class>, <instance> */
+-                Py_DECREF(value);
+-                value = type;
+-                type = (PyObject*) type->ob_type;
+-                Py_INCREF(type);
+-        }
++            }
++        #endif
+     }
+-    else {
+-        /* Not something you can raise.  You get an exception
+-           anyway, just not what you specified :-) */
+-        PyErr_Format(PyExc_TypeError,
+-                     "exceptions must be classes, instances, or "
+-                     "strings (deprecated), not %s",
+-                     type->ob_type->tp_name);
+-        goto raise_error;
+-    }
+     PyErr_Restore(type, value, tb);
+     return;
+ raise_error:
+@@ -856,11 +1085,21 @@
+     return;
+ }
+ 
+-static int __Pyx_InternStrings(__Pyx_InternTabEntry *t) {
++static PyObject *__Pyx_GetName(PyObject *dict, PyObject *name) {
++    PyObject *result;
++    result = PyObject_GetAttr(dict, name);
++    if (!result)
++        PyErr_SetObject(PyExc_NameError, name);
++    return result;
++}
++
++static int __Pyx_InitStrings(__Pyx_StringTabEntry *t) {
+     while (t->p) {
+-        *t->p = PyString_InternFromString(t->s);
++        *t->p = PyString_FromStringAndSize(t->s, t->n - 1);
+         if (!*t->p)
+             return -1;
++        if (t->i)
++            PyString_InternInPlace(t->p);
+         ++t;
+     }
+     return 0;

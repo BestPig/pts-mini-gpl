@@ -6,7 +6,9 @@
 # This script hash been tested and found working on Ubuntu Karmic and Ubuntu
 # Lucid.
 
-test "$EUID" = 0 || exec sudo "$0" "$@"
+if test "$EUID" = 0; then SUDO=; else SUDO=sudo; fi
+
+exec $SUDO bash /dev/stdin "$@" <<'ENDSUDO'
 
 set -ex
 
@@ -119,3 +121,4 @@ for F in /usr/share/X11/xkb/rules/{base,evdev,xorg,xfree86}.xml; do
     perl -pi -0777 -e 's@^([ \t]*<variant>\s*<configItem>\s*<name>dvorak-intl</name>.*?</variant>)[ \t]*\n@$1\n        <variant>\n          <configItem>\n            <name>pts_magyar</name>\n            <description>pts magyar</description>\n          </configItem>\n        </variant>\n@gsm' "$F"
   fi
 done
+ENDSUDO

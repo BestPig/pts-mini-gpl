@@ -313,6 +313,8 @@ def SftpUpload(rf, wf, version, msg_ids,
     if block_size > 16383:
       block_size &= ~16383;
     while True:
+      # TODO(pts): Read at most 128kB from the file at once, and fill the
+      # send buffer with parts of a message.
       data = uf.read(block_size)
       if 0 < len(data) < block_size:
         # Allow a partial read, just before EOF.

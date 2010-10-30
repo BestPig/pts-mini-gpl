@@ -3,10 +3,14 @@
 
 """pysshsftp: Python SFTP client using the ssh(1) command.
 
-pysshsftp is a proof-of-concept SFTP client for Unix, which uses the OpenSSH
-ssh(1) command-line tool (for establishing the secure connection), but it
-doesn't use the sftp(1) command-line tool (so it can e.g. upload files
-without truncating them first).
+pysshsftp is a proof-of-concept, education SFTP client for Unix, which uses
+the OpenSSH ssh(1) command-line tool (for establishing the secure
+connection), but it doesn't use the sftp(1) command-line tool (so it can
+e.g. upload files without truncating them first).
+
+Only very little part of the SFTP protocol has been implemented so far
+(initialization, uploading, and stat()ting files). The SFTP protocol was
+reverse-engineered from sftp-client.c in the OpenSSH 5.1 source code.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,10 +21,17 @@ This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of   
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
+
+TODO(pts): Convert some assertions to I/O errors or parse errors.
 """
 
 __author__ = 'pts@fazekas.hu (Peter Szabo)'
 
+import errno
+import fcntl
+import os
+import os.path
+import select
 import struct
 import subprocess
 import sys
@@ -124,7 +135,9 @@ class SftpStatusError(IOError):
 
 def SendMsg(f, msg):
   assert isinstance(msg, str)
-  assert len(msg) < SFTP_MAX_MSG_LENGTH
+  # We have to enforce this, because sftp-server.c in OpenSSH 5.1 has this
+  # limit, and drops the connection if it gets messages larger than this one.
+  assert len(msg) <= SFTP_MAX_MSG_LENGTH
   buf = struct.pack('>L', len(msg)) + msg
   got = f.write(buf)
   assert got is None  # The file(...) object returns None on write().
@@ -135,17 +148,28 @@ def RecvRes(f):
   size_str = f.read(4)
   assert len(size_str) == 4, 'EOF at message length, got=%d' % len(size_str)
   size = int(struct.unpack('>L', size_str)[0])
+  assert size <= SFTP_MAX_MSG_LENGTH, 'message too large, size=%d' % size
   res = f.read(size)
   assert len(res) == size, 'EOF in incoming message, got=%d expected=%d' % (
       len(res), size)
   return res
 
 
-def RaiseIfErrorStatus(res, msg_id):
+def RaiseErrorIfStatus(res, msg_id):
   if len(res) >= 9 and res.startswith(chr(SSH2_FXP_STATUS)):
     _, res_id, res_status = struct.unpack('>BLL', res[:9])
     assert res_id == msg_id
     raise SftpStatusError(int(res_status))
+
+
+def RaiseErrorUnlessStatusOk(res, msg_id):
+  if len(res) >= 9 and res.startswith(chr(SSH2_FXP_STATUS)):
+    _, res_id, res_status = struct.unpack('>BLL', res[:9])
+    assert res_id == msg_id
+    if res_status != SSH2_FX_OK:
+      raise SftpStatusError(int(res_status))
+  else:
+    assert 0, 'expected SSH2_FXP_STATUS, got %d' % ord(res[0])
 
 
 def ParseKeyValuePairs(res, i, pair_count):
@@ -212,12 +236,167 @@ def SftpStat(rf, wf, version, msg_id, path):
     msg_type = SSH2_FXP_STAT
   SendMsg(wf, struct.pack('>BLL', msg_type, msg_id, len(path)) + path)
   res = RecvRes(rf)
-  RaiseIfErrorStatus(res, msg_id)
+  RaiseErrorIfStatus(res, msg_id)
   assert len(res) >= 5
   res_type, res_id = struct.unpack('>BL', res[:5])
   assert res_id == msg_id
   assert res_type == SSH2_FXP_ATTRS
   return ParseAttrs(res, 5)
+
+
+def SftpUpload(rf, wf, version, msg_ids,
+              local_filename, remote_filename, open_flags,
+              block_size, max_pending):
+  assert isinstance(block_size, int) and 0 < block_size <= 0x7fffffff
+  assert isinstance(max_pending, int) and max_pending > 0
+  print >>sys.stderr, 'info: will upload %r to %r' % (
+      local_filename, remote_filename)
+  uf = open(local_filename, 'rb')
+  fcntl_flags = None
+  try:
+    st = os.fstat(uf.fileno())
+
+    # Send the open command.
+    # 
+    # TODO(pts): sftp-client.c adds SSH2_FILEXFER_ATTR_ACMODTIME -- is it
+    #            useful? Will it be retained (doesn't seem so)?
+    attr_flags = SSH2_FILEXFER_ATTR_PERMISSIONS | SSH2_FILEXFER_ATTR_ACMODTIME
+    attr_perm = st.st_mode & 07777  # sftp-client uses 0777.
+    attr_atime = int(st.st_atime)
+    attr_mtime = int(st.st_mtime)
+    msg_id = msg_ids[0]
+    msg_ids[0] += 1
+    SendMsg(
+        wf,
+        struct.pack('>BLL', SSH2_FXP_OPEN, msg_id, len(remote_filename)) +
+        remote_filename +
+        struct.pack('>LLLLL', SSH2_FXF_WRITE | open_flags,
+                    attr_flags, attr_perm, attr_atime, attr_mtime))
+
+    res = RecvRes(rf)
+    RaiseErrorIfStatus(res, msg_ids[0] - 1)
+    assert len(res) >= 5
+    res_type, res_id = struct.unpack('>BL', res[:5])
+    assert res_id == msg_id
+    assert res_type == SSH2_FXP_HANDLE
+    assert len(res) >= 9
+    handle_size = int(struct.unpack('>L', res[5 : 9])[0])
+    # The filehandle is a string.
+    handle = res[9 : 9 + handle_size]
+    # Example handle: '\x00\x00\x00\x00'.
+    print >>sys.stderr, 'info: got handle %r for uploading' % handle
+
+    # Do the file transfer.
+    #
+    # Change rf to nonblocking mode so we can do partial reads (of ACKs) on
+    # it.
+    rfd = rf.fileno()
+    fcntl_flags = fcntl.fcntl(rfd, fcntl.F_GETFL, 0)
+    new_fcntl_flags = fcntl_flags | os.O_NONBLOCK
+    fcntl.fcntl(rfd, fcntl.F_SETFL, new_fcntl_flags)
+    # pending_acks contains the message IDs (msg_id) already sent to the
+    # server, but not yet acknowledged by the server.
+    pending_acks = set()
+    ofs = 0
+    res = ''
+    res_size = None
+    had_partial_read = False
+    # If this 21 is changed to 20, sftp-server.c in OpenSSH 5.1 would start
+    # dropping the connection because the SSH2_FXP_WRITE messages would
+    # exceed its hardcoded SFTP_MAX_MSG_LENGTH.
+    max_block_size = SFTP_MAX_MSG_LENGTH - 21 - len(handle)
+    if block_size > max_block_size:
+      block_size = max_block_size
+    # Make the block size divisible by 16384 to get good memory page
+    # alignment and thus high performance disk reads. (On Linux i386, the
+    # divisor 4096 would have been enough.)
+    if block_size > 16383:
+      block_size &= ~16383;
+    while True:
+      data = uf.read(block_size)
+      if 0 < len(data) < block_size:
+        # Allow a partial read, just before EOF.
+        # TODO(pts): What if somebody is appending to the file while we're
+        # reading it?
+        assert not had_partial_read, 'partial read, got %d' % len(data)
+        had_partial_read = True
+
+      # Read ACK responses from the SFTP server.
+      if data:
+        num_acks_to_read = len(pending_acks) - max_pending + 1
+        do_ack_while_available = num_acks_to_read <= 0
+      else:
+        num_acks_to_read = len(pending_acks)
+        do_ack_while_available = False
+      print >>sys.stderr, 'info: upload len(data)=%d nacks=%d doack=%r' % (
+          len(data), num_acks_to_read, do_ack_while_available)
+      while num_acks_to_read > 0 or do_ack_while_available:
+        if res_size is None:
+          read_size = 4 - len(res)
+        else:
+          read_size = res_size - len(res)
+        try:
+          res_new = rf.read(read_size)
+        except IOError, e:
+          if e[0] != errno.EAGAIN:
+            raise
+          if do_ack_while_available:
+            break
+          select.select((rfd,), (), ())  # Wait for input to be available.
+          continue
+        assert res_new, 'EOF while reading from ACKs'
+        res += res_new
+        if res_size is None:
+          if len(res) == 4:
+            res_size = int(struct.unpack('>L', res)[0])
+            # We are expecting an SSH2_FXP_STATUS response, which should not
+            # be longer than 9 bytes. But we're generous and allow a bit more.
+            assert res_size <= 128, (
+                'expected write response too large, size=%d' % res_size)
+            res = ''
+          continue
+        if len(res) < res_size:
+          continue
+        # Now we managed to read a whole message to res. Let's process it.
+        assert len(res) >= 5
+        res_type, res_id = struct.unpack('>BL', res[:5])
+        res_id = int(res_id)
+        assert res_id in pending_acks
+        pending_acks.remove(res_id)
+        num_acks_to_read -= 1
+        RaiseErrorUnlessStatusOk(res, res_id)
+        res = ''
+        res_size = None
+        
+      if not data:  # End of local file.
+        break
+      msg_id = msg_ids[0]
+      pending_acks.add(msg_id)
+      msg_ids[0] += 1
+      # TODO(pts): Use a buffer (in uf.read) to avoid a long data copy here.
+      SendMsg(wf, ''.join(
+          [struct.pack('>BLL', SSH2_FXP_WRITE, msg_id, len(handle)),
+           handle, struct.pack('>QL', ofs, len(data)), data]))
+      ofs += len(data)
+
+    print >>sys.stderr, 'info: data uploaded, ACKs received, closing'
+
+    # Restore the blocking mode for rfd.
+    if fcntl_flags is not None and fcntl_flags != new_fcntl_flags:
+      fcntl.fcntl(rfd, fcntl.F_SETFL, fcntl_flags)
+      new_fcntl_flags = fcntl_flags
+
+    # Send the close command.
+    msg_id = msg_ids[0]
+    msg_ids[0] += 1
+    SendMsg(wf, struct.pack('>BLL', SSH2_FXP_CLOSE, msg_id, len(handle)) +
+            handle)
+    res = RecvRes(rf)
+    RaiseErrorUnlessStatusOk(res, msg_id)
+  finally:
+    if fcntl_flags is not None and fcntl_flags != new_fcntl_flags:
+      fcntl.fcntl(rfd, fcntl.F_SETFL, fcntl_flags)
+    uf.close()
 
 
 def main(argv):
@@ -231,40 +410,55 @@ def main(argv):
   rf = p.stdout
   wf = p.stdin
 
-  # Do the init handshake.
-  SendMsg(wf, struct.pack('>BL', SSH2_FXP_INIT, SSH2_FILEXFER_VERSION))
-  res = RecvRes(rf)
+  try:
+    # Do the init handshake.
+    SendMsg(wf, struct.pack('>BL', SSH2_FXP_INIT, SSH2_FILEXFER_VERSION))
+    res = RecvRes(rf)
 
-  # Parse the init response.
-  assert res.startswith(chr(SSH2_FXP_VERSION))
-  # Example res: '\x02\x00\x00\x00\x03\x00\x00\x00\x18posix-rename@openssh.com\x00\x00\x00\x011\x00\x00\x00\x13statvfs@openssh.com\x00\x00\x00\x012\x00\x00\x00\x14fstatvfs@openssh.com\x00\x00\x00\x012'
-  assert len(res) >= 5
-  version = int(struct.unpack('>L', res[1 : 5])[0])
-  # Don't check this, we should be able to use any server version, just like
-  # what sftp-client does.
-  #assert version in (0, 1, 2, 3), (
-  #    'version mismatch: client=%d server=%d' %
-  #    (SSH2_FILEXFER_VERSION, version))
-  i = 5
-  i, server_init_flags = ParseKeyValuePairs(res, i, -1)
+    # Parse the init response.
+    assert res.startswith(chr(SSH2_FXP_VERSION))
+    # Example res: '\x02\x00\x00\x00\x03\x00\x00\x00\x18'
+    #     'posix-rename@openssh.com\x00\x00\x00\x011\x00\x00\x00\x13'
+    #     'statvfs@openssh.com\x00\x00\x00\x012\x00\x00\x00\x14'
+    #     'fstatvfs@openssh.com\x00\x00\x00\x012'
+    assert len(res) >= 5
+    version = int(struct.unpack('>L', res[1 : 5])[0])
+    # Don't check this, we should be able to use any server version, just like
+    # what sftp-client does.
+    #assert version in (0, 1, 2, 3), (
+    #    'version mismatch: client=%d server=%d' %
+    #    (SSH2_FILEXFER_VERSION, version))
+    i = 5
+    i, server_init_flags = ParseKeyValuePairs(res, i, -1)
 
-  # Example: {'fstatvfs@openssh.com': '2', 'statvfs@openssh.com': '2',
-  #           'posix-rename@openssh.com': '1'}
-  print >>sys.stderr, 'info: server_init_flags = %r' % server_init_flags
-  msg_id = 0
+    # Example: {'fstatvfs@openssh.com': '2', 'statvfs@openssh.com': '2',
+    #           'posix-rename@openssh.com': '1'}
+    print >>sys.stderr, 'info: server_init_flags = %r' % server_init_flags
+    msg_id = 0
 
-  # Send a simple stat request and 
-  msg_id += 1
-  attrs = SftpStat(rf, wf, version, msg_id, '/dev/null')
-  print >>sys.stderr, 'info: stat("/dev/null") = %r' % attrs
+    # Send a simple stat request and parse the response.
+    msg_id += 1
+    attrs = SftpStat(rf, wf, version, msg_id, '/dev/null')
+    print >>sys.stderr, 'info: stat("/dev/null") = %r' % attrs
 
-  # Close the SSH client connection.
-  wf.close()
-  rf.close()
-  print >>sys.stderr, 'info: waiting for the SSH process exit'
-  status = p.wait()
+    # Upload (put) a file.
+    if os.path.isfile('test.upload'):
+      msg_ids = [msg_id + 1]
+      # block_size should be less than 1024 * 256 (SFTP_MAX_MSG_LENGTH, as
+      # defined on the server, in sftp-server.c of OpenSSH 5.1).
+      SftpUpload(rf, wf, version, msg_ids, 'test.upload', '/tmp/remote.upload',
+                 open_flags=SSH2_FXF_CREAT,  # | SSH2_FXF_TRUNC,
+                 block_size=1 << 22, max_pending=64)
+      msg_id = msg_ids[0] - 1
+  finally:
+    # Close the SSH client connection.
+    wf.close()
+    rf.close()
+    print >>sys.stderr, 'info: waiting for the SSH process to exit'
+    status = p.wait()
   assert status == 0, 'SSH process exited with status=0x%x' % status
   print >>sys.stderr, 'info: sftp done'
+
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv))

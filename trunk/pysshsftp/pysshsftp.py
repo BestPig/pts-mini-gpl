@@ -3,7 +3,7 @@
 
 """pysshsftp: Python SFTP client using the ssh(1) command.
 
-pysshsftp is a proof-of-concept, education SFTP client for Unix, which uses
+pysshsftp is a proof-of-concept, educational SFTP client for Unix, which uses
 the OpenSSH ssh(1) command-line tool (for establishing the secure
 connection), but it doesn't use the sftp(1) command-line tool (so it can
 e.g. upload files without truncating them first).

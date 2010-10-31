@@ -448,6 +448,11 @@ def main(argv):
       msg_ids = [msg_id + 1]
       # block_size should be less than 1024 * 256 (SFTP_MAX_MSG_LENGTH, as
       # defined on the server, in sftp-server.c of OpenSSH 5.1).
+      #
+      # If open_flags=SSH2_FXF_EXCL|SSH2_FXF_CREAT is specified, and the remote
+      # file already exists, then SftpStatusError(SSH2_FX_FAILURE) would be
+      # raised, without a specific indication of the real error message or
+      # errno.
       SftpUpload(rf, wf, version, msg_ids, 'test.upload', '/tmp/remote.upload',
                  open_flags=SSH2_FXF_CREAT,  # | SSH2_FXF_TRUNC,
                  block_size=1 << 22, max_pending=64)

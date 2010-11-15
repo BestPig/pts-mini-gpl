@@ -1,10 +1,23 @@
 #! /bin/bash --
 # by pts@fazekas.hu at Mon Nov 15 14:18:22 CET 2010
 
+if test "$0" = bash; then
+  # The script is piped, save it.
+  set -ex
+  TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"
+  mkdir -p "$TMPDIR"
+  SCRIPT="$TMPDIR/quicklinux.sh"
+  (echo "#!$BASH"; echo "# Auto-generated on $(LC_TIME=C date)") >"$SCRIPT"
+  chmod +x "$SCRIPT"
+  cat /dev/fd/0 >>"$SCRIPT"
+  exec "$SCRIPT"
+fi
+
 if test "$1" != --no-xterm; then
   echo "Starting the TeamViewer QuickLinux launcher in an xterm"
-  xterm -T "Portable TeamViewer QuickLinux launcher" -e \
-      "$BASH" "$0" --no-xterm &
+  xterm -T "Portable TeamViewer QuickLinux launcher" \
+       -bg '#fdd' -fg black \
+       -e "$BASH" "$0" --no-xterm &
   exit
 fi
 

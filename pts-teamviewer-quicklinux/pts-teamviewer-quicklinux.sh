@@ -13,7 +13,7 @@
 #
 
 if test "$0" = bash || test "$0" = sh || test "$0" = dash ||
-   test "$0" == zsh; then
+   test "$0" = zsh; then
   # The script is piped, save it to /tmp/...
   # This snippet works with bash and dash and zsh.
   set -ex

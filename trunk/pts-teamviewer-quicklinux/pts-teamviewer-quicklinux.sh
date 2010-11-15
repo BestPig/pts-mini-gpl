@@ -6,31 +6,55 @@
 # This script has been tested on Ubuntu Lucid, but it should work on earlier
 # Ubuntu versions as well.
 #
-# Example invocation from any desktop:
+# Invocation instructions for for Ubuntu users:
 #
-#   wget -O- http://pts-mini-gpl.googlecode.com/svn/trunk/pts-teamviewer-quicklinux/pts-teamviewer-quicklinux.sh | bash
-#   goo.gl/k9imm
+# 1. Press Alt-<F2>.
 #
+# 2. In the window appearing, type (or copy-paste) the following, and press
+#    <Enter>.
+#
+#      wget -O- goo.gl/k9imm | sh
+#
+#    Please note that the ``O'' between the dashes is a capital O. All other
+#    characters are lowercase.
+#
+# 3. Wait for a window with a yellow background to appear.
+#
+# 4. Wait a few seconds untile TeamViewer is downloaded and started.
+#
+# 5. In the ``TeamViewer'' window appearing, find the 9-digit ID and 4-digit
+#    Password fields (with blue background), and tell them to me.
+#
+# ----
+#
+# Longer invocation:
+#
+#   wget -O- http://pts-mini-gpl.googlecode.com/svn/trunk/pts-teamviewer-quicklinux/pts-teamviewer-quicklinux.sh | sh
 
 if test "$0" = bash || test "$0" = sh || test "$0" = dash ||
    test "$0" = zsh; then
-  # The script is piped, save it to /tmp/...
-  # This snippet works with bash and dash and zsh.
-  # SUXX: The whole thing doesn't work with dash, because it buffers too much,
-  # and /dev/fd/0 will get clobbered.
-  set -ex
-  TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"
-  mkdir -p "$TMPDIR"
-  SCRIPT="$TMPDIR/quicklinux.sh"
-  if test "${BASH%/bash}" = "$BASH" || ! test -x "$BASH"; then
-    BASH="$(type bash)" && BASH="${BASH#bash is }"
-    test -x "$BASH"
-  fi
-  (echo "#!$BASH"; echo "# Auto-generated on $(LC_TIME=C date)") >"$SCRIPT"
-  chmod +x "$SCRIPT"
-  cat /dev/fd/0 >>"$SCRIPT"
-  exec "$SCRIPT"
+  # The script is not available as a regular file, so save it.
+  doit() {
+    # This snippet works with bash and dash and zsh.
+    set -ex
+    TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"
+    mkdir -p "$TMPDIR"
+    SCRIPT="$TMPDIR/quicklinux.sh"
+    if test "${BASH%/bash}" = "$BASH" || ! test -x "$BASH"; then
+      BASH="$(type bash)" && BASH="${BASH#bash is }"
+      test -x "$BASH"
+    fi
+    ( echo "#!$BASH"; echo "# Auto-generated on $(LC_TIME=C date)"
+      cat) >"$SCRIPT"
+    chmod +x "$SCRIPT"
+    exec "$SCRIPT"
+  }
+  DOIT=doit
+else
+  DOIT='source /proc/self/fd/0'
 fi
+
+$DOIT <<'END'
 
 if test "$1" != --no-xterm; then
   echo "Starting the TeamViewer QuickLinux launcher in an xterm"
@@ -79,8 +103,10 @@ fi
 
 <./opt/teamviewer/teamviewer/5/bin/wrapper \
 >./opt/teamviewer/teamviewer/5/bin/wrapper2 \
-grep -vE '/winelog|WINEPREFIX='
+grep -vE "/winelog|WINEPREFIX="
 
 export WINEPREFIX="$PWD"
 "$BASH" ./opt/teamviewer/teamviewer/5/bin/wrapper2 \
-    'c:\Program Files\TeamViewer\Version5\TeamViewer.exe'
+    "c:\\Program Files\\TeamViewer\\Version5\\TeamViewer.exe"
+
+END

@@ -97,7 +97,7 @@ if ! test -f "$DEB.extracted"; then
     wget -O "$DEB" http://www.teamviewer.com/download/"$DEB"
     true >>"$DEB.downloaded"
   fi
-  ar p teamviewer_linux_x64.deb data.tar.gz | tar xz
+  ar p "$DEB" data.tar.gz | tar xz
   true >>"$DEB.extracted"
 fi
 

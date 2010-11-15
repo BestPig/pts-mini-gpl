@@ -9,14 +9,20 @@
 # Example invocation from any desktop:
 #
 #   wget -O- http://pts-mini-gpl.googlecode.com/svn/trunk/pts-teamviewer-quicklinux/pts-teamviewer-quicklinux.sh | bash
+#   goo.gl/k9imm
 #
 
-if test "$0" = bash || test "$0" = sh; then
-  # The script is piped, save it.
+if test "$0" = bash || test "$0" = sh || test "$0" = dash; then
+  # The script is piped, save it to /tmp/...
+  # This snippet works with bash and dash and zsh.
   set -ex
   TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"
   mkdir -p "$TMPDIR"
   SCRIPT="$TMPDIR/quicklinux.sh"
+  if test "${BASH%/bash}" = "$BASH" || ! test -x "$BASH"; then
+    BASH="$(type bash)" && BASH="${BASH#bash is }"
+    test -x "$BASH"
+  fi
   (echo "#!$BASH"; echo "# Auto-generated on $(LC_TIME=C date)") >"$SCRIPT"
   chmod +x "$SCRIPT"
   cat /dev/fd/0 >>"$SCRIPT"

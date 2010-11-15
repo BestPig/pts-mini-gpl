@@ -13,7 +13,7 @@
 # 2. In the window appearing, type (or copy-paste) the following, and press
 #    <Enter>.
 #
-#      wget -O- goo.gl/k9imm | sh
+#      bash -c 'wget -O- goo.gl/k9imm | bash'
 #
 #    Please note that the ``O'' between the dashes is a capital O. All other
 #    characters are lowercase.

@@ -16,6 +16,8 @@ if test "$0" = bash || test "$0" = sh || test "$0" = dash ||
    test "$0" = zsh; then
   # The script is piped, save it to /tmp/...
   # This snippet works with bash and dash and zsh.
+  # SUXX: The whole thing doesn't work with dash, because it buffers too much,
+  # and /dev/fd/0 will get clobbered.
   set -ex
   TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"
   mkdir -p "$TMPDIR"

@@ -1,7 +1,17 @@
 #! /bin/bash --
+#
+# pts-teamviewer-quicklinux.sh: TeamViewer QuickSupport alternative for Ubuntu
 # by pts@fazekas.hu at Mon Nov 15 14:18:22 CET 2010
+#
+# This script has been tested on Ubuntu Lucid, but it should work on earlier
+# Ubuntu versions as well.
+#
+# Example invocation from any desktop:
+#
+#   wget -O- http://pts-mini-gpl.googlecode.com/svn/trunk/pts-teamviewer-quicklinux/pts-teamviewer-quicklinux.sh | bash
+#
 
-if test "$0" = bash; then
+if test "$0" = bash || test "$0" = sh; then
   # The script is piped, save it.
   set -ex
   TMPDIR="/tmp/pts_teamviewer_quicklinux--$HOSTNAME--$(id -nu)"

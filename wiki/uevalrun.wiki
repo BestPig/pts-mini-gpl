@@ -1,0 +1,6 @@
+#summary self-contained computation sandbox for Linux
+#labels Phase-Requirements,Phase-Design,Phase-Implementation,Featured
+
+See this documentation as a standalone HTML page <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/uevalrun/doc/uevalrun.html">here</a>.
+
+<wiki:gadget url="http://pts-mini-gpl.googlecode.com/svn/trunk/uevalrun/doc/uevalrun.gadget.xml" width="100%" border=0 />

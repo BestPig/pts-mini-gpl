@@ -1,0 +1,496 @@
+--- php-5.3.3.orig/main/main.c	2010-03-12 11:28:59.000000000 +0100
++++ php-5.3.3/main/main.c	2010-11-26 14:10:12.644853187 +0100
+@@ -1891,21 +1891,21 @@
+ 	EG(error_handling)  = EH_NORMAL;
+ 	EG(exception_class) = NULL;
+ 	PG(disable_functions) = NULL;
+ 	PG(disable_classes) = NULL;
+ 
+ #if HAVE_SETLOCALE
+ 	setlocale(LC_CTYPE, "");
+ 	zend_update_current_locale();
+ #endif
+ 
+-#if HAVE_TZSET
++#if 0 && HAVE_TZSET
+ 	tzset();
+ #endif
+ 
+ #if defined(PHP_WIN32) || (defined(NETWARE) && defined(USE_WINSOCK))
+ 	/* start up winsock services */
+ 	if (WSAStartup(wVersionRequested, &wsaData) != 0) {
+ 		php_printf("\nwinsock.dll unusable. %d\n", WSAGetLastError());
+ 		return FAILURE;
+ 	}
+ #endif
+--- php-5.3.3.orig/ext/standard/basic_functions.c	2010-05-13 04:13:30.000000000 +0200
++++ php-5.3.3/ext/standard/basic_functions.c	2010-11-26 14:22:28.335007939 +0100
+@@ -3442,21 +3442,21 @@
+ 		char **env;
+ 
+ 		for (env = environ; env != NULL && *env != NULL; env++) {
+ 			if (!strncmp(*env, pe->key, pe->key_len) && (*env)[pe->key_len] == '=') {	/* found it */
+ 				*env = "";
+ 				break;
+ 			}
+ 		}
+ # endif
+ 	}
+-#ifdef HAVE_TZSET
++#if 0 && defined(HAVE_TZSET)
+ 	/* don't forget to reset the various libc globals that
+ 	 * we might have changed by an earlier call to tzset(). */
+ 	if (!strncmp(pe->key, "TZ", pe->key_len)) {
+ 		tzset();
+ 	}
+ #endif
+ 
+ 	efree(pe->putenv_string);
+ 	efree(pe->key);
+ }
+@@ -4133,21 +4133,21 @@
+ #  if _MSC_VER < 1500
+ 		/* Yet another VC6 bug, unset may return env not found */
+ 		if (error_code != 0 || 
+ 			(error_code == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)) {
+ #  else
+ 		if (error_code != 0) { /* success */
+ #  endif
+ # endif
+ #endif
+ 			zend_hash_add(&BG(putenv_ht), pe.key, pe.key_len + 1, (void **) &pe, sizeof(putenv_entry), NULL);
+-#ifdef HAVE_TZSET
++#if 0 && defined(HAVE_TZSET)
+ 			if (!strncmp(pe.key, "TZ", pe.key_len)) {
+ 				tzset();
+ 			}
+ #endif
+ 			RETURN_TRUE;
+ 		} else {
+ 			efree(pe.putenv_string);
+ 			efree(pe.key);
+ 			RETURN_FALSE;
+ 		}
+--- php-5.3.3.orig/ext/standard/php_crypt_r.c	2010-06-17 12:22:03.000000000 +0200
++++ php-5.3.3/ext/standard/php_crypt_r.c	2010-11-26 13:46:16.284851177 +0100
+@@ -90,22 +90,27 @@
+ #ifdef ZTS
+ 	tsrm_mutex_lock(php_crypt_extended_init_lock);
+ #endif
+ 
+ 	if (!initialized) {
+ #ifdef PHP_WIN32
+ 		InterlockedIncrement(&initialized);
+ #elif (defined(__GNUC__) && (__GNUC__ >= 4 && __GNUC_MINOR >= 2))
+ 		__sync_fetch_and_add(&initialized, 1);
+ #elif defined(HAVE_ATOMIC_H) /* Solaris 10 defines atomic API within */
++#if 0
+ 		membar_producer();
+ 		atomic_add_int(&initialized, 1);
++#else
++		initialized += 1;
++#endif
++
+ #endif
+ 		_crypt_extended_init();
+ 	}
+ #ifdef ZTS
+ 	tsrm_mutex_unlock(php_crypt_extended_init_lock);
+ #endif
+ }
+ 
+ /* MD% crypt implementation using the windows CryptoApi */
+ #define MD5_MAGIC "$1$"
+--- php-5.3.3.orig/ext/com_dotnet/com_variant.c	2010-01-03 10:23:27.000000000 +0100
++++ php-5.3.3/ext/com_dotnet/com_variant.c	2010-11-26 14:11:37.874852111 +0100
+@@ -923,21 +923,23 @@
+ 
+ 		memset(&tmv, 0, sizeof(tmv));
+ 		tmv.tm_year = systime.wYear - 1900;
+ 		tmv.tm_mon = systime.wMonth - 1;
+ 		tmv.tm_mday = systime.wDay;
+ 		tmv.tm_hour = systime.wHour;
+ 		tmv.tm_min = systime.wMinute;
+ 		tmv.tm_sec = systime.wSecond;
+ 		tmv.tm_isdst = -1;
+ 
++#if 0
+ 		tzset();
++#endif
+ 		RETVAL_LONG(mktime(&tmv));
+ 	}
+ 
+ 	VariantClear(&vres);
+ }
+ /* }}} */
+ 
+ /* {{{ proto object variant_date_from_timestamp(int timestamp)
+    Returns a variant date representation of a unix timestamp */
+ PHP_FUNCTION(variant_date_from_timestamp)
+@@ -952,21 +954,23 @@
+ 			&timestamp)) {
+ 		return;
+ 	}
+ 
+ 	if (timestamp < 0) {
+ 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Timestamp value must be a positive value.");
+ 		RETURN_FALSE;
+ 	}
+ 
+ 	VariantInit(&res);
++#if 0
+ 	tzset();
++#endif
+ 	ttstamp = timestamp;
+ 	tmv = localtime(&ttstamp);
+ 	memset(&systime, 0, sizeof(systime));
+ 
+ 	systime.wDay = tmv->tm_mday;
+ 	systime.wHour = tmv->tm_hour;
+ 	systime.wMinute = tmv->tm_min;
+ 	systime.wMonth = tmv->tm_mon + 1;
+ 	systime.wSecond = tmv->tm_sec;
+ 	systime.wYear = tmv->tm_year + 1900;
+--- php-5.3.3.orig/Zend/zend_language_scanner.c	2010-06-30 04:45:10.000000000 +0200
++++ php-5.3.3/Zend/zend_language_scanner.c	2010-11-26 16:45:08.034851246 +0100
+@@ -884,21 +884,21 @@
+ 				} else {
+ 					goto yyc_ST_NOWDOC;
+ 				}
+ 			}
+ 		}
+ 	}
+ /* *********************************** */
+ yyc_INITIAL:
+ 	{
+ 		static const unsigned char yybm[] = {
+-			  0,   0,   0,   0,   0,   0,   0,   0, 
++			128,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0, 128, 128,   0,   0, 128,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			128,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+@@ -1146,40 +1146,45 @@
+ 		yych = *++YYCURSOR;
+ 		if (yych == 'E') goto yy25;
+ 		if (yych != 'e') goto yy10;
+ yy25:
+ 		YYDEBUG(25, *YYCURSOR);
+ 		++YYCURSOR;
+ 		YYFILL(1);
+ 		yych = *YYCURSOR;
+ 		YYDEBUG(26, *YYCURSOR);
+ 		if (yych <= '\r') {
+-			if (yych <= 0x08) goto yy10;
+-			if (yych <= '\n') goto yy25;
+-			if (yych <= '\f') goto yy10;
+-			goto yy25;
++			if (yych <= 0x08) {
++				if (yych <= 0x00) goto yy25;
++				goto yy10;
++			} else {
++				if (yych <= '\n') goto yy25;
++				if (yych <= '\f') goto yy10;
++				goto yy25;
++			}
+ 		} else {
+ 			if (yych <= ' ') {
+ 				if (yych <= 0x1F) goto yy10;
+ 				goto yy25;
+ 			} else {
+ 				if (yych != '=') goto yy10;
+ 			}
+ 		}
+ yy27:
+ 		YYDEBUG(27, *YYCURSOR);
+ 		++YYCURSOR;
+ 		YYFILL(5);
+ 		yych = *YYCURSOR;
+ 		YYDEBUG(28, *YYCURSOR);
+ 		if (yych <= '!') {
+ 			if (yych <= '\f') {
++				if (yych <= 0x00) goto yy27;
+ 				if (yych <= 0x08) goto yy10;
+ 				if (yych <= '\n') goto yy27;
+ 				goto yy10;
+ 			} else {
+ 				if (yych <= '\r') goto yy27;
+ 				if (yych == ' ') goto yy27;
+ 				goto yy10;
+ 			}
+ 		} else {
+ 			if (yych <= 'O') {
+@@ -1222,24 +1227,28 @@
+ 		YYDEBUG(34, *YYCURSOR);
+ 		yych = *++YYCURSOR;
+ 		if (yych != '\'') goto yy10;
+ yy35:
+ 		YYDEBUG(35, *YYCURSOR);
+ 		++YYCURSOR;
+ 		YYFILL(1);
+ 		yych = *YYCURSOR;
+ 		YYDEBUG(36, *YYCURSOR);
+ 		if (yych <= '\r') {
+-			if (yych <= 0x08) goto yy10;
+-			if (yych <= '\n') goto yy35;
+-			if (yych <= '\f') goto yy10;
+-			goto yy35;
++			if (yych <= 0x08) {
++				if (yych <= 0x00) goto yy35;
++				goto yy10;
++			} else {
++				if (yych <= '\n') goto yy35;
++				if (yych <= '\f') goto yy10;
++				goto yy35;
++			}
+ 		} else {
+ 			if (yych <= ' ') {
+ 				if (yych <= 0x1F) goto yy10;
+ 				goto yy35;
+ 			} else {
+ 				if (yych != '>') goto yy10;
+ 			}
+ 		}
+ 		YYDEBUG(37, *YYCURSOR);
+ 		++YYCURSOR;
+@@ -2070,21 +2079,21 @@
+ 	zend_copy_value(zendlval, (yytext+1), (yyleng-1));
+ 	zendlval->type = IS_STRING;
+ 	return T_VARIABLE;
+ }
+ #line 2075 "Zend/zend_language_scanner.c"
+ 	}
+ /* *********************************** */
+ yyc_ST_IN_SCRIPTING:
+ 	{
+ 		static const unsigned char yybm[] = {
+-			  0,   0,   0,   0,   0,   0,   0,   0, 
+++			 64,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0, 192,  64,   0,   0,  64,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			192,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			 56,  56,  56,  56,  56,  56,  56,  56, 
+ 			 56,  56,   0,   0,   0,   0,   0,   0, 
+ 			  0,  40,  40,  40,  40,  40,  40,   8, 
+ 			  8,   8,   8,   8,   8,   8,   8,   8, 
+ 			  8,   8,   8,   8,   8,   8,   8,   8, 
+@@ -2109,20 +2118,24 @@
+ 			  8,   8,   8,   8,   8,   8,   8,   8, 
+ 			  8,   8,   8,   8,   8,   8,   8,   8, 
+ 			  8,   8,   8,   8,   8,   8,   8,   8, 
+ 		};
+ 		YYDEBUG(121, *YYCURSOR);
+ 		YYFILL(16);
+ 		yych = *YYCURSOR;
+ 		YYDEBUG(-1, yych);
+ 		switch (yych) {
+ 		case 0x00:
++		case '\t':
++		case '\n':
++		case '\r':
++		case ' ':	goto yy139;
+ 		case 0x01:
+ 		case 0x02:
+ 		case 0x03:
+ 		case 0x04:
+ 		case 0x05:
+ 		case 0x06:
+ 		case 0x07:
+ 		case 0x08:
+ 		case '\v':
+ 		case '\f':
+@@ -2137,24 +2150,20 @@
+ 		case 0x16:
+ 		case 0x17:
+ 		case 0x18:
+ 		case 0x19:
+ 		case 0x1A:
+ 		case 0x1B:
+ 		case 0x1C:
+ 		case 0x1D:
+ 		case 0x1E:
+ 		case 0x1F:	goto yy183;
+-		case '\t':
+-		case '\n':
+-		case '\r':
+-		case ' ':	goto yy139;
+ 		case '!':	goto yy152;
+ 		case '"':	goto yy179;
+ 		case '#':	goto yy175;
+ 		case '$':	goto yy164;
+ 		case '%':	goto yy158;
+ 		case '&':	goto yy159;
+ 		case '\'':	goto yy177;
+ 		case '(':	goto yy146;
+ 		case ')':
+ 		case ',':
+@@ -3551,24 +3560,28 @@
+ 		yych = *++YYCURSOR;
+ 		if (yych == 'T') goto yy261;
+ 		if (yych != 't') goto yy193;
+ yy261:
+ 		YYDEBUG(261, *YYCURSOR);
+ 		++YYCURSOR;
+ 		YYFILL(3);
+ 		yych = *YYCURSOR;
+ 		YYDEBUG(262, *YYCURSOR);
+ 		if (yych <= '\r') {
+-			if (yych <= 0x08) goto yy193;
+-			if (yych <= '\n') goto yy261;
+-			if (yych <= '\f') goto yy193;
+-			goto yy261;
++			if (yych <= 0x08) {
++				if (yych <= 0x00) goto yy261;
++				goto yy193;
++			} else {
++				if (yych <= '\n') goto yy261;
++				if (yych <= '\f') goto yy193;
++				goto yy261;
++			}
+ 		} else {
+ 			if (yych <= ' ') {
+ 				if (yych <= 0x1F) goto yy193;
+ 				goto yy261;
+ 			} else {
+ 				if (yych == '>') goto yy201;
+ 				goto yy193;
+ 			}
+ 		}
+ yy263:
+@@ -4979,20 +4992,21 @@
+ }
+ #line 4981 "Zend/zend_language_scanner.c"
+ yy475:
+ 		YYDEBUG(475, *YYCURSOR);
+ 		++YYCURSOR;
+ 		YYFILL(1);
+ 		yych = *YYCURSOR;
+ yy476:
+ 		YYDEBUG(476, *YYCURSOR);
+ 		if (yych <= '\f') {
++			if (yych <= 0x00) goto yy475;
+ 			if (yych <= 0x08) goto yy140;
+ 			if (yych <= '\n') goto yy475;
+ 			goto yy140;
+ 		} else {
+ 			if (yych <= '\r') goto yy475;
+ 			if (yych == ' ') goto yy475;
+ 			goto yy140;
+ 		}
+ yy477:
+ 		YYDEBUG(477, *YYCURSOR);
+@@ -6800,21 +6814,21 @@
+ #line 983 "Zend/zend_language_scanner.l"
+ 		{
+ 	return T_ECHO;
+ }
+ #line 6805 "Zend/zend_language_scanner.c"
+ 	}
+ /* *********************************** */
+ yyc_ST_LOOKING_FOR_PROPERTY:
+ 	{
+ 		static const unsigned char yybm[] = {
+-			  0,   0,   0,   0,   0,   0,   0,   0, 
++			128,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0, 128, 128,   0,   0, 128,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			128,   0,   0,   0,   0,   0,   0,   0, 
+ 			  0,   0,   0,   0,   0,   0,   0,   0, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,   0,   0,   0,   0,   0,   0, 
+ 			  0,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+@@ -6836,41 +6850,44 @@
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 			 64,  64,  64,  64,  64,  64,  64,  64, 
+ 		};
+ 		YYDEBUG(766, *YYCURSOR);
+ 		YYFILL(2);
+ 		yych = *YYCURSOR;
+-		if (yych <= '-') {
+-			if (yych <= '\r') {
++		if (yych <= ',') {
++			if (yych <= '\f') {
++				if (yych <= 0x00) goto yy768;
+ 				if (yych <= 0x08) goto yy774;
+-				if (yych <= '\n') goto yy768;
+-				if (yych <= '\f') goto yy774;
++				if (yych >= '\v') goto yy774;
+ 			} else {
+-				if (yych == ' ') goto yy768;
+-				if (yych <= ',') goto yy774;
+-				goto yy770;
++				if (yych <= '\r') goto yy768;
++				if (yych != ' ') goto yy774;
+ 			}
+ 		} else {
+-			if (yych <= '_') {
++			if (yych <= '^') {
++				if (yych <= '-') goto yy770;
+ 				if (yych <= '@') goto yy774;
+ 				if (yych <= 'Z') goto yy772;
+-				if (yych <= '^') goto yy774;
+-				goto yy772;
++				goto yy774;
+ 			} else {
+-				if (yych <= '`') goto yy774;
+-				if (yych <= 'z') goto yy772;
+-				if (yych <= '~') goto yy774;
+-				goto yy772;
++				if (yych <= '`') {
++					if (yych <= '_') goto yy772;
++					goto yy774;
++				} else {
++					if (yych <= 'z') goto yy772;
++					if (yych <= '~') goto yy774;
++					goto yy772;
++				}
+ 			}
+ 		}
+ yy768:
+ 		YYDEBUG(768, *YYCURSOR);
+ 		++YYCURSOR;
+ 		yych = *YYCURSOR;
+ 		goto yy780;
+ yy769:
+ 		YYDEBUG(769, *YYCURSOR);
+ 		yyleng = YYCURSOR - SCNG(yy_text);
+--- php-5.3.3.orig/Zend/zend_language_scanner.l	2010-06-30 04:45:10.000000000 +0200
++++ php-5.3.3/Zend/zend_language_scanner.l	2010-11-26 16:16:19.485320152 +0100
+@@ -843,21 +843,21 @@
+ 
+ yymore_restart:
+ 
+ /*!re2c
+ re2c:yyfill:check = 0;
+ LNUM	[0-9]+
+ DNUM	([0-9]*"."[0-9]+)|([0-9]+"."[0-9]*)
+ EXPONENT_DNUM	(({LNUM}|{DNUM})[eE][+-]?{LNUM})
+ HNUM	"0x"[0-9a-fA-F]+
+ LABEL	[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*
+-WHITESPACE [ \n\r\t]+
++WHITESPACE [ \n\r\t\000]+
+ TABS_AND_SPACES [ \t]*
+ TOKENS [;:,.\[\]()|^&+-/*=%!~$<>?@]
+ ANY_CHAR [^]
+ NEWLINE ("\r"|"\n"|"\r\n")
+ 
+ /* compute yyleng before each rule */
+ <!*> := yyleng = YYCURSOR - SCNG(yy_text);
+ 
+ 
+ <ST_IN_SCRIPTING>"exit" {

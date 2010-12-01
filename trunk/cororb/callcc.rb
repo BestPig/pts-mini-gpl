@@ -20,15 +20,23 @@ class Fiber;
   @@current = @@root = nil
   def initialize(&block)
     if nil == block;
-      fail "multiple root fibers" if nil != @@current
+      raise ArgumentError, "tried to create Proc object without a block" if
+          nil != @@current
       @cc = nil
       @is_alive = true
       @resumed_by = nil
+      @thread = Thread.current
     else
       @is_alive = true  # Can be resumed/transferred later.
       @resumed_by = false
+      @thread = Thread.current
       x = callcc { |cc| @cc = cc; return }
-      x = block.call(*x)
+      begin
+        x = block.call(*x)
+        exc = nil
+      rescue Exception
+        exc = $!
+      end
       @is_alive = false
       # TODO(pts): Discard the current stack frame to reclaim memory.
       # TODO(pts): Avoid creating local variables.
@@ -37,17 +45,36 @@ class Fiber;
       if @resumed_by;
         resumed_by = @resumed_by
         @resumed_by = nil  # Break the reference to save memory.
-        resumed_by.transfer(x)
+        # TODO(pts): Add a begin/rescue to the transfer call below.
+        if !resumed_by.alive?
+          # TODO(pts): Do we have to use the parant of resumed_by instead?
+          resumed_by = @@root
+          exc = FiberError.new('dead fiber called')
+        end
       else
-        @@root.transfer(x)
+        resumed_by = @@root
       end
+      if exc;
+        resumed_by.transfer_exc(exc)
+      else
+        resumed_by.transfer(x)
+      end
+      fail "unreachable"  # TODO(pts): Optimize this away.
     end
+  end
+  def inspect()
+    "#<Fiber:0x%x>" % (object_id << 1)
+  end
+  def to_s()
+    "#<Fiber:0x%x>" % (object_id << 1)
   end
   def alive?()
     @is_alive
   end
   def transfer(*args)
     raise FiberError, "dead fiber called" if !@is_alive
+    raise FiberError, "fiber called across threads" if @thread != Thread.current
+       
     if self == @@current;
       fail if args.size > 1  # ruby 1.9.2 does this.
       return args[0]  # nil if args.empty?
@@ -61,11 +88,14 @@ class Fiber;
       @@current = self
       cc.call(args)  # TODO(pts): Forget about cc (for garbage collection).
     }
+    raise x if x.kind_of? Exception
     x.size > 1 ? x : x[0]
   end
   def resume(*args)
+    # TODO(pts): Fix the error order.
     raise FiberError, "dead fiber called" if !@is_alive
     raise FiberError, "double resume" if @resumed_by
+    raise FiberError, "fiber called across threads" if @thread != Thread.current
     @resumed_by = @@current
     transfer(*args)
   end
@@ -87,6 +117,27 @@ class Fiber;
   end
   @@root = @@current = self.new
   protected
+  def transfer_exc(exc)
+    # TODO(pts): Avoid code duplication.
+    raise FiberError, "dead fiber called" if !@is_alive
+    raise FiberError, "fiber called across threads" if @thread != Thread.current
+       
+    if self == @@current;
+      fail if args.size > 1  # ruby 1.9.2 does this.
+      return args[0]  # nil if args.empty?
+    end
+    fail if nil != @@current.cc
+    fail if nil == @cc
+    x = callcc { |cc|
+      @@current.cc = cc
+      cc = @cc
+      @cc = nil
+      @@current = self
+      cc.call(exc)  # TODO(pts): Forget about cc (for garbage collection).
+    }
+    raise x if x.kind_of? Exception
+    x.size > 1 ? x : x[0]
+  end
   attr_accessor :cc
 end if RUBY_VERSION < "1.9"
 
@@ -231,6 +282,17 @@ if true;
   f2 = Fiber.new { |fi1| fi1.resume() * 10 }
   f3 = Fiber.new { f2.transfer(Fiber.new { 42 }) * -1 }
   fail if 420 != f3.resume()
+
+  # This is to demonstrate that exceptions are propagated.
+  f1 = Fiber.new { fail "lucky" }
+  f2 = Fiber.new {
+    begin
+      f1.resume
+    rescue Exception => e
+      "un" + e.to_s
+    end
+  }
+  fail if f2.resume != "unlucky"
 
   #p root.cc  # Can't call protected method.
   foo = Fiber.new { |*x|

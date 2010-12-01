@@ -7,6 +7,16 @@
 # (using the emulation provided here).
 #
 # TODO(pts): Run the Ruby unit tests.
+#
+# Root reason for hthe leak, on http://www.ruby-forum.com/topic/170608
+#
+#   The central problem is that gcc (and other compilers) tend to create
+#   sparse stack frames such that, when a new frame is pushed onto the
+#   stack, it does not completely overwrite the one that had been previously
+#   stored there. The new frame gets activated with old VALUE pointers
+#   preserved inside its holes. These become "live" again as far as any
+#   conservative garbage collector is concerned. And, viola, a leak is born!
+#
 $-w = true
 
 class FiberError < StandardError
@@ -38,6 +48,7 @@ class Fiber;
         exc = $!
       end
       @is_alive = false
+      block = nil  # Save memory.
       # TODO(pts): Discard the current stack frame to reclaim memory.
       # TODO(pts): Avoid creating local variables.
       # Ruby 1.8 doesn't have tail recursion optimization, and 1.9.2 doesn't
@@ -54,11 +65,9 @@ class Fiber;
       else
         resumed_by = @@root
       end
-      if exc;
-        resumed_by.transfer_exc(exc)
-      else
-        resumed_by.transfer(x)
-      end
+      @@goodbye_args.push(resumed_by, exc, x)
+      resumed_by = exc = x = nil  # Save memory.
+      @@goodbye.call()
       fail "unreachable"  # TODO(pts): Optimize this away.
     end
   end
@@ -88,6 +97,7 @@ class Fiber;
       @@current = self
       cc.call(args)  # TODO(pts): Forget about cc (for garbage collection).
     }
+    @@goodbye_args.clear  # Save memory.
     raise x if x.kind_of? Exception
     x.size > 1 ? x : x[0]
   end
@@ -115,9 +125,7 @@ class Fiber;
       @@current.__yield(*args)
     end
   end
-  @@root = @@current = self.new
-  protected
-  def transfer_exc(exc)
+  def __transfer_exc(exc)  # TODO(pts): Make this code non-protected.
     # TODO(pts): Avoid code duplication.
     raise FiberError, "dead fiber called" if !@is_alive
     raise FiberError, "fiber called across threads" if @thread != Thread.current
@@ -135,9 +143,28 @@ class Fiber;
       @@current = self
       cc.call(exc)  # TODO(pts): Forget about cc (for garbage collection).
     }
+    @@goodbye_args.clear  # Save memory.
     raise x if x.kind_of? Exception
     x.size > 1 ? x : x[0]
   end
+  protected
+  @@root = @@current = self.new
+  @@goodbye_args = []
+  callcc { |cc1|
+    callcc { |cc2|
+      @@goodbye = cc2
+      cc1.call()
+    }
+    # This is the routine called by @@goodbye.call.
+    loop {
+      # fiber, exc, x = @@goodbye_args
+      if @@goodbye_args[1];
+        @@goodbye_args[0].__transfer_exc(@@goodbye_args[1])
+      else
+        @@goodbye_args[0].transfer(@@goodbye_args[2])
+      end
+    }    
+  }
   attr_accessor :cc
 end if RUBY_VERSION < "1.9"
 
@@ -327,6 +354,19 @@ def g(n, fi)
 end
 
 p "All OK."
+
+if false;
+  GC.enable
+  GC.start
+  # SUXX: The Ruby 1.8 garbage collector doesn't get triggered automatically.
+  # Wouldn't work even with 3GB of RAM wouth calling the GC manually.
+  Process.setrlimit(Process::RLIMIT_AS, 30 << 20)  # 30MB
+  # On narancs at r171, 510 fits, 520 doesn't fit to 30MB -- so we do 5200.
+  (1..52000).each { |i|
+    fail if Fiber.new { [i] }.resume != [i]
+    #GC.start if (i & 127) == 0  # This fixes the problem.
+  }
+end
 
 #depth = 230  # SystemStackError above that.
 #root = Fiber.current

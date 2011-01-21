@@ -69,7 +69,7 @@
 // probably it's not possible to implement a typesafe version of printf()
 // which is also as fast.
 
-// Just like fprintf(), but its first argument is an std::ostream* instead
+// Just like fprintf(), but its first argument is an std::ostream& instead
 // of a FILE*.
 //
 // Please note that StreamPrintf() is much less efficient than fprintf().

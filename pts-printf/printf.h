@@ -35,6 +35,8 @@
 // * Needs GCC as a compiler because it uses blocks within expressions:
 //   ({ ... }).
 // * Uses the built-in vsnprintf etc. functions. Tested with glibc and uclibc.
+// * The widest integer type supported is the long long, and the widest
+//   floating point type is the long double.
 
 #include <stdio.h>
 #include <stdlib.h>

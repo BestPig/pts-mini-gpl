@@ -61,9 +61,9 @@ xkb_symbols "pts_magyar" {
     key <AE11> { [ minus, underscore, udiaeresis, Udiaeresis ] };
     key <AE12> { [ equal, plus, oacute, Oacute ] };
 
-    key <AD01> { [ q, Q ] };
+    key <AD01> { [ q, Q, ssharp, ssharp ] };
     key <AD02> { [ w, W ] };
-    key <AD03> { [ e, E ] };
+    key <AD03> { [ e, E, adiaeresis, Adiaeresis ] };
     key <AD04> { [ r, R ] };
     key <AD05> { [ t, T ] };
     key <AD06> { [ y, Y, y, Y, y, Y, y, Y, y, Y, y, Y, y, Y ] };

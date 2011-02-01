@@ -99,7 +99,7 @@ directory. Currently no further documentation is provided on this.
  * line editing even without a terminfo definition or inputrc file
    (useful in chroot, provided by libreadline/libncurses by default)
  * the usual help, license used in interactive mode
- * the `stacklessco2.7-static' binary (stacklessco) has the following coroutine-based I/O modules built in: gevent-0.3.12, syncless-0.20, concurrence-0.3.1
+ * the `stacklessco2.7-static' binary (stacklessco) has the following coroutine-based I/O modules built in: gevent-0.3.12, gevent-MySQL (GIT snapshot on 20110221, works with gevent and Syncless), syncless-0.20, concurrence-0.3.1 (including the MySQL client)
  * the `stacklessco2.7-static' binary (stacklessco) has the following crypto modules built in: pycrypto-2.3, alo-aes-0.3
 
 == Executable binary layout ==

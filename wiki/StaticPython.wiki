@@ -42,7 +42,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 Here is how to use the stacklessco version, with Syncless:
 
 {{{
-$ $ wget -O stacklessco2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static
+$ wget -O stacklessco2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static
 $ chmod +x stacklessco2.7-static
 $ ./stacklessco2.7-static
 Python 2.7.1 Stackless 3.1b3 060516 (release27-maint, Feb  1 2011, 16:57:16) 

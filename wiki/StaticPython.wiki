@@ -8,13 +8,16 @@
 
 = Download and run =
 
-  * Download <a href="http://pts-mini-gpl.googlecode.com/files/python2.7-static">the !StaticPython 2.7 normal (non-Stackless) executable binary</a> for version 0.1.
-  * Alternatively, download <a href="http://pts-mini-gpl.googlecode.com/files/stackless2.7-static">the !StaticPython 2.7 Stackless executable binary</a> for version 0.1.
+The latest release can be downloaded here (pick the one which best suits your needs):
+
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python2.7-static">the !StaticPython 2.7.x normal (non-Stackless) executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless2.7-static">the !StaticPython 2.7.x Stackless executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static">the !StaticPython 2.7.x Stackless + Coroutine-based I/O + Crypto executable binary</a> (stacklessco)
 
 Here is how to use it:
 
 {{{
-$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/files/python2.7-static
+$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python2.7-static
 $ chmod +x python2.7-static
 $ ./python2.7-static
 Python 2.7 (r27:82500, Aug 11 2010, 10:51:33) 
@@ -26,7 +29,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 Here is how to use the Stackless version:
 
 {{{
-$ wget -O stackless2.7-static http://pts-mini-gpl.googlecode.com/files/stackless2.7-static
+$ wget -O stackless2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless2.7-static
 $ chmod +x stackless2.7-static
 $ ./stackless2.7-static
 Python 2.7 Stackless 3.1b3 060516 (release27-maint, Aug 11 2010, 13:55:35) 
@@ -36,13 +39,30 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> 
 }}}
 
+Here is how to use the stacklessco version, with Syncless:
+
+{{{
+$ $ wget -O stacklessco2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static
+$ chmod +x stacklessco2.7-static
+$ ./stacklessco2.7-static
+Python 2.7.1 Stackless 3.1b3 060516 (release27-maint, Feb  1 2011, 16:57:16) 
+[GCC 4.1.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from syncless import coio
+>>> coio.sleep(1.5)
+(sleeping for 1.5 second)
+<object object at 0xf7709490>
+>>> 
+}}}
+
 = For what purpose is !StaticPython useful? =
 
   * for running Python scripts in chroot and other restricted environments (e.g. for running untrusted standard Python code)
   * for running CGI scripts on some web hosting providers where Python is not preinstalled (this is slow)
   * for trying the newest Python 2.x and running scripts on a very old Linux system or on a system where package installation is not possible or it is cumbersome
   * for trying the newest Stackless Python 2.x and running scripts on a Linux system where source installation is not possible or it is cumbersome
-  * for deploying and running Tornado, Eventlet or Twisted-based networking applications on a machine without a working Python installation (please note that the framework itself has also to be deployed)
+  * for deploying and running Syncless, gevent or Concurrence-based networking applications on a machine without a working Python installation
+  * for deploying and running Tornado, Eventlet or Twisted-based networking applications on a machine without a working Python installation (please note that the I/O framework itself has also to be deployed, i.e. extracted next to your application)
 
 = When isn't !StaticPython recommended? =
 
@@ -74,11 +94,13 @@ directory. Currently no further documentation is provided on this.
  * almost all standard Python 2.7 modules built-in
  * almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `spwd`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
  * greenlet integrated for coroutine support
- * the `stackless2.7-static` binary has Stackless Python integrated for high performance coroutine support
+ * the `stackless2.7-static` binary has Stackless Python (includinging the `stackless` module) integrated for high performance coroutine support
  * multithreading (using thread and threading as usual)
  * line editing even without a terminfo definition or inputrc file
    (useful in chroot, provided by libreadline/libncurses by default)
  * the usual help, license used in interactive mode
+ * the `stacklessco2.7-static' binary (stacklessco) has the following coroutine-based I/O modules built in: gevent-0.3.12, syncless-0.20, concurrence-0.3.1
+ * the `stacklessco2.7-static' binary (stacklessco) has the following crypto modules built in: pycrypto-2.3, alo-aes-0.3
 
 == Executable binary layout ==
 

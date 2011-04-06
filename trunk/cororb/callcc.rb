@@ -42,6 +42,8 @@ class Fiber;
       @thread = Thread.current
       x = callcc { |cc| @cc = cc; return }
       begin
+        # SUXX: TODO(pts):
+        # Even Proc.new(&block) doesn't prevent the LocalJumpError.
         x = block.call(*x)
         exc = nil
       rescue Exception

@@ -1,0 +1,11 @@
+# mod4 is the Windows key.
+"|up"
+	control + mod4 + Up
+"|down"
+	control + mod4 + Down
+"|left"
+	control + mod4 + Left
+"|right"
+	control + mod4 + Right
+"xeyes"
+	control + alt + e

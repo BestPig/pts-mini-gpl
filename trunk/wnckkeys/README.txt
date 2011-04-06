@@ -16,7 +16,8 @@ Example compilation on Ubuntu Lucid:
 Example run:
 
   $ ./wnckkeys -n -f example.config.txt
-  # Press Windows-<Left>, Windows-<Right>, Windows-<Up> or Windows-<Down> to
-  # activate a window relative the the currently active window.
+  # Press Ctrl-Windows-<Left>, Ctrl-Windows-<Right>, Ctrl-Windows-<Up> or
+  # Ctrl-Windows-<Down> to activate a window relative the the currently
+  # active window.
 
 __EOF__

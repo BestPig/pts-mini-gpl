@@ -562,9 +562,17 @@ start_as_daemon (void)
       exit (EXIT_SUCCESS);
     }
 
+#if 0
   i = getdtablesize();
+  system("ls -l /proc/$PPID/fd");
   if (i > 1024)
     i = 1024;
+  if (i < 100)
+    i = 100;
+#else
+  /* GDK has already created sockets and pipes. Don't close them. */
+  i = 2;
+#endif
   for (; i >= 0; i--)
     {
       close (i);

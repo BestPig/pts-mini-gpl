@@ -1,0 +1,202 @@
+#! /bin/dash
+# by pts@fazekas.hu at Wed Apr  6 13:09:34 CEST 2011
+
+CC="${CC:-gcc}"
+CFLAGS="${CFLAGS:-}"
+LIBS="${LIBS:-}"
+
+test_compile_and_run() {
+  echo "$1" >tmp_test.c
+  $CC -o tmp_test tmp_test.c >tmp_test_compile.err 2>&1 || return 120
+  ./tmp_test >tmp_test.err 2>&1 || return 121
+}
+
+#** @param $1 '' or '#include <vfork.h>'
+have_working_vfork() {
+  # .c file copied from autoconf-2.61
+  test_compile_and_run "
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+$1
+/* On some sparc systems, changes by the child to local and incoming
+   argument registers are propagated back to the parent.  The compiler
+   is told about this with #include <vfork.h>, but some compilers
+   (e.g. gcc -O) don't grok <vfork.h>.  Test for this by using a
+   static variable whose address is put into a register that is
+   clobbered by the vfork.  */
+static void
+#ifdef __cplusplus
+sparc_address_test (int arg)
+# else
+sparc_address_test (arg) int arg;
+#endif
+{
+  static pid_t child;
+  if (!child) {
+    child = vfork ();
+    if (child < 0) {
+      perror (\"vfork\");
+      _exit(2);
+    }
+    if (!child) {
+      arg = getpid();
+      write(-1, \"\", 0);
+      _exit (arg);
+    }
+  }
+}
+
+int
+main ()
+{
+  pid_t parent = getpid ();
+  pid_t child;
+
+  sparc_address_test (0);
+
+  child = vfork ();
+
+  if (child == 0) {
+    /* Here is another test for sparc vfork register problems.  This
+       test uses lots of local variables, at least as many local
+       variables as main has allocated so far including compiler
+       temporaries.  4 locals are enough for gcc 1.40.3 on a Solaris
+       4.1.3 sparc, but we use 8 to be safe.  A buggy compiler should
+       reuse the register of parent for one of the local variables,
+       since it will think that parent can't possibly be used any more
+       in this routine.  Assigning to the local variable will thus
+       munge parent in the parent process.  */
+    pid_t
+      p = getpid(), p1 = getpid(), p2 = getpid(), p3 = getpid(),
+      p4 = getpid(), p5 = getpid(), p6 = getpid(), p7 = getpid();
+    /* Convince the compiler that p..p7 are live; otherwise, it might
+       use the same hardware register for all 8 local variables.  */
+    if (p != p1 || p != p2 || p != p3 || p != p4
+	|| p != p5 || p != p6 || p != p7)
+      _exit(1);
+
+    /* On some systems (e.g. IRIX 3.3), vfork doesn't separate parent
+       from child file descriptors.  If the child closes a descriptor
+       before it execs or exits, this munges the parent's descriptor
+       as well.  Test for this by closing stdout in the child.  */
+    _exit(close(1) != 0);
+  } else {
+    int status;
+    struct stat st;
+
+    while (wait(&status) != child)
+      ;
+    return (
+	 /* Was there some problem with vforking?  */
+	 child < 0
+
+	 /* Did the child fail?  (This shouldn't happen.)  */
+	 || status
+
+	 /* Did the vfork/compiler bug occur?  */
+	 || parent != getpid()
+
+	 /* Did the file descriptor bug occur?  */
+	 || fstat(1, &st) != 0
+	 );
+  }
+}"
+}
+
+#** @param $1 exitcode (120: compile error, 121: runtime error)
+echo_why() {
+  if test "$1" = 0; then
+    echo yes
+  elif test "$1" = 120; then
+    echo "no, compile error"
+  elif test "$1" = 121; then
+    echo "no, runtime error"
+  else
+    echo "no, error"
+  fi
+  return "$1"
+}
+
+#** @param $1 name of the package, as managed by pkgconfig
+pkgconfig_update_cflags_and_libs() {
+  local PKG_LIBS="$(pkg-config --libs "$1" 2>tmp_pkgconfig_libs.err)"
+  test "$PKG_LIBS" || return 1
+  local PKG_CFLAGS="$(pkg-config --cflags "$1" 2>tmp_pkgconfig_cflags.err)"
+  test "$PKG_CFLAGS" || return 1
+  LIBS="$LIBS $PKG_LIBS"
+  CFLAGS="$CFLAGS $PKG_CFLAGS"
+}
+
+#** @param $1 error message
+fatal() {
+  echo "configure: fatal error: $1" >&2
+  exit 2
+}
+
+# --- main
+
+echo -n 'processing command-line flags... '
+PREFIX=/usr/local
+USE_FORK=1
+for ARG in "$@"; do
+  case "$ARG" in
+    --enable-guile) echo; fatal "--enable-guile not supported yet" ;;
+    --disable-guile) ;;
+    --enable-fork) USE_FORK=1 ;;
+    --disable-fork) USE_FORK= ;;
+    --prefix=*) PREFIX="${ARG#*=}" ;;
+    *) echo; fatal "unknown command-line flag $ARG"
+  esac
+done
+echo ok
+echo -n "command-line config: "
+# Print the config properly quoted.
+awk 'BEGIN{ORS=" "; i=1; while (i < ARGC && ARGV[i++]!="--"); while (i < ARGC) {
+    s=ARGV[i++]; gsub(/\x27/, "\x27\\\x27\x27", s);
+    if (sub(/=/, "=\x27", s)) { s = s "\x27" }
+    print s } ORS="\n"; print}' -- \
+    PREFIX="$PREFIX" \
+    USE_FORK="$USE_FORK" \
+|| exit 1
+
+CFLAGS="$CFLAGS -DWNCKKEYS_CONFIG=1"
+CFLAGS="$CFLAGS -DFORK_FLAG=${USE_FORK:-0}"
+CFLAGS="$CFLAGS -DWNCKKEYS_VERSION=\"1.8.3-p1\""
+
+if test "$USE_FORK"; then
+  echo -n 'checking for working vfork... '
+  if have_working_vfork ''; then
+    echo yes
+    CFLAGS="$CFLAGS -DHAVE_WORKING_VFORK"
+  else
+    echo_why "$?"
+    echo -n 'checking for working vfork in vfork.h... '
+    if have_working_vfork '#include <vfork.h>'; then
+      echo yes
+    else
+      echo_why "$?"
+      CFLAGS="$CFLAGS -DHAVE_WORKING_VFORK -DVFORK_NEEDS_VFORK_H"
+    fi
+  fi
+fi
+
+echo -n 'checking for libwnck-1.0... '
+if pkgconfig_update_cflags_and_libs libwnck-1.0; then
+  echo yes
+else
+  echo no
+  fatal "libwnck-1.0 is required"
+fi
+
+rm -f tmp_*
+
+echo 'creating config.mk'
+export TOQ="# Autogenerated configuration in Makefile syntax.
+CC = $CC
+CFLAGS = $CFLAGS
+LIBS = $LIBS
+prefix = $PREFIX"
+awk 'BEGIN {s = ENVIRON["TOQ"]; gsub(/[*?\[()\$\\\x27"]/, "\\\\&", s); gsub(/\$/, "$$", s); print s}' \
+    >config.mk || exit 1
+echo 'configuration OK, now run: make'

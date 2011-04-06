@@ -204,14 +204,13 @@ class TestFiber < Test::Unit::TestCase
     }
   end
 
-  # !! can LocalJumpError be implemented?
-  #def test_return
-  #  assert_raise(LocalJumpError){
-  #    Fiber.new do
-  #      return
-  #    end.resume
-  #  }
-  #end
+  def test_return
+    assert_raise(LocalJumpError){
+      Fiber.new do
+        return
+      end.resume
+    }
+  end
 
   # !! why ArgumentError -- nevertheless, emulated fibers would raise a
   # NameError instead of an ArgumentError.

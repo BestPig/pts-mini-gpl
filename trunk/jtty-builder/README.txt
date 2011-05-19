@@ -17,6 +17,8 @@ To start serving a hello-world JSP page on Unix, do this:
   $ wget -O jttyp.jar \
     http://pts-mini-gpl.googlecode.com/svn/trunk/jtty-prebuilt/jttyp.jar
 
+   The size of jttyp.jar is less than 3.5MB.
+
 1. Download jtty-builder:
 
   $ svn co http://pts-mini-gpl.googlecode.com/svn/trunk/jtty-builder
@@ -35,7 +37,7 @@ To start serving a hello-world JSP page on Unix, do this:
 
 5. Copy jttyp.jar to the application directory:
 
-  # cp jtty-builder/jttyp.jar .
+  $ cp jtty-builder/jttyp.jar .
 
 6. Create your .war file or application directory. A simple example:
 

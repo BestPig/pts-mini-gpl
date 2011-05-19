@@ -1,0 +1,3 @@
+BUILD_TIME=Thu May 19 12:34:28 GMT 2011
+TOMCAT_ARCHIVE=apache-tomcat-6.0.32.tar.gz
+JETTY_ARCHIVE=jetty-distribution-7.4.1.v20110513.tar.gz

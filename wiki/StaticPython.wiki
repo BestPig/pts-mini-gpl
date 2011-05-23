@@ -137,3 +137,5 @@ The following comments apply to the Linux version, but the Mac OS X version has 
  * missing: OpenSSL, SSL sockets
  * missing: IPv6 support
  * missing: GUI bindings (tkinter, GTK, Qt etc.)
+ * missing: release for Microsoft Windows
+ * missing: release for non-i386, non-amd64 architectures

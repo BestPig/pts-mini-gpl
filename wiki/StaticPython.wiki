@@ -1,24 +1,17 @@
-#summary Statically linked Python 2.x and Stackless for 32-bit Linux
+#summary Statically linked Python 2.x and Stackless for 32-bit Linux, Mac OS X and FreeBSD
 
 = What is !StaticPython? =
 
-!StaticPython is a statically linked version of the Python 2.x (currently 2.7) and Stackless Python 2.x interpreters and their standard modules for 32-bit Linux systems (i686, i386). It is distributed as a single, statically linked 32-bit Linux executable binary, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
+!StaticPython is a statically linked version of the Python 2.x (currently 2.7.1) and Stackless Python 2.x interpreters and their standard modules for 32-bit (i686, i386, x86) Linux, Mac OS X and FreeBSD systems. It is distributed as single, statically linked 32-bit executable binaries, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
 
-!StaticPython is similar to <a href="http://www.portablepython.com/">Portable Python</a>, except that !StaticPython runs on Linux instead of Windows, and it has Stackless Python support.
+!StaticPython is similar to <a href="http://www.portablepython.com/">Portable Python</a>, except that !StaticPython runs on Linux instead of Windows, and it has Stackless Python, greenlet and coroutine-based I/O library support.
 
-= Download and run =
+!StaticPython is a bit similar to <a href="http://pypi.python.org/pypi/bbfreeze">bbfreeze</a>, but it contains the Python interpreter, all the `.py` library files and all the built-in C extensions in a single executable file (while bbfreeze generates a separate `.so` file for each C extension library), and it doesn't contain any application-specific `.py` or `.pyc` files.
 
-The latest release can be downloaded here (pick the one which best suits your needs):
-
-  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python2.7-static">the !StaticPython 2.7.x normal (non-Stackless) executable binary</a>
-  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless2.7-static">the !StaticPython 2.7.x Stackless executable binary</a>
-  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static">the !StaticPython 2.7.x Stackless + Coroutine-based I/O + Crypto executable binary</a> (stacklessco)
-
-Here is how to use it:
+Here is how to use !StaticPython:
 
 {{{
-$ wget -O python2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python2.7-static
-$ chmod +x python2.7-static
+$ curl http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/d.sh | bash /dev/stdin python2.7-static
 $ ./python2.7-static
 Python 2.7 (r27:82500, Aug 11 2010, 10:51:33) 
 [GCC 4.1.2] on linux2
@@ -29,8 +22,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 Here is how to use the Stackless version:
 
 {{{
-$ wget -O stackless2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless2.7-static
-$ chmod +x stackless2.7-static
+$ curl http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/d.sh | bash /dev/stdin stackless2.7-static
 $ ./stackless2.7-static
 Python 2.7 Stackless 3.1b3 060516 (release27-maint, Aug 11 2010, 13:55:35) 
 [GCC 4.1.2] on linux2
@@ -42,8 +34,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 Here is how to use the stacklessco version, with Syncless:
 
 {{{
-$ wget -O stacklessco2.7-static http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static
-$ chmod +x stacklessco2.7-static
+$ curl http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/d.sh | bash /dev/stdin stacklessco2.7-static
 $ ./stacklessco2.7-static
 Python 2.7.1 Stackless 3.1b3 060516 (release27-maint, Feb  1 2011, 16:57:16) 
 [GCC 4.1.2] on linux2
@@ -55,11 +46,33 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>> 
 }}}
 
+= Download for Linux =
+
+The latest release can be downloaded here (pick the one which best suits your needs):
+
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python2.7-static">the !StaticPython 2.7.x normal (non-Stackless) executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless2.7-static">the !StaticPython 2.7.x Stackless executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static">the !StaticPython 2.7.x Stackless + Coroutine-based I/O + Crypto executable binary</a> (stacklessco)
+
+= Download for Mac OS X =
+
+These binaries have been tested on Mac OS X 10.5 and 10.6.
+
+The latest release can be downloaded here (pick the one which best suits your needs):
+
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/python2.7-static">the !StaticPython 2.7.x normal (non-Stackless) executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stackless2.7-static">the !StaticPython 2.7.x Stackless executable binary</a>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stacklessco2.7-static">the !StaticPython 2.7.x Stackless + Coroutine-based I/O + Crypto executable binary</a> (stacklessco)
+
+= Download for FreeBSD =
+
+Please use the Linux downloads above and run those binaries in [http://www.freebsd.org/doc/handbook/linuxemu.html Linux Binary Compatibility] mode on FreeBSD.
+
 = For what purpose is !StaticPython useful? =
 
   * for running Python scripts in chroot and other restricted environments (e.g. for running untrusted standard Python code)
-  * for running CGI scripts on some web hosting providers where Python is not preinstalled (this is slow)
-  * for trying the newest Python 2.x and running scripts on a very old Linux system or on a system where package installation is not possible or it is cumbersome
+  * for running CGI scripts on some web hosting providers where Python is not preinstalled (warning: this is slow, because !StaticPython starts up relatively slowly)
+  * for trying the newest Python 2.x and running scripts on a very old Linux, FreeBSD or Mac OS X system or on a system where package installation is not possible or it is cumbersome
   * for trying the newest Stackless Python 2.x and running scripts on a Linux system where source installation is not possible or it is cumbersome
   * for deploying and running Syncless, gevent or Concurrence-based networking applications on a machine without a working Python installation
   * for deploying and running Tornado, Eventlet or Twisted-based networking applications on a machine without a working Python installation (please note that the I/O framework itself has also to be deployed, i.e. extracted next to your application)
@@ -70,6 +83,8 @@ Type "help", "copyright", "credits" or "license" for more information.
   * if dependencies are or need shared libraries (`.so` files) -- !StaticPython doesn't support loading `.so` files, not even with the _dl_ or _ctypes_ modules
   * if startup and module import has to be fast -- since !StaticPython stores `.py` files (no `.pyc`) in a ZIP file at the end of the binary
   * for GUI programming -- no GUI or graphics library is included, loading `.so` files is not supported
+  * if the architecture is not i386 (x86) or amd64 (x86_64)
+  * if the operating system is not Linux, Mac OS X or FreeBSD
 
 = How to extend, customize or recompile !StaticPython? =
 
@@ -79,8 +94,9 @@ Here is how to recompile for yourself:
 $ cd /tmp
 $ svn checkout http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython staticpython-build
 $ cd staticpython-build
-$ ./build.sh             # Build the non-Stackless vesion.
-$ ./build.sh  stackless  # Build to Stackless version.
+$ ./build.sh               # Build the non-Stackless vesion.
+$ ./build.sh  stackless    # Build to Stackless version.
+$ ./build.sh  stacklessco  # Build to Stackless + IO (stacklessco) version.
 }}}
 
 To extend and customize !StaticPython, look at the `build.sh` script and the files in its
@@ -92,17 +108,19 @@ directory. Currently no further documentation is provided on this.
 
  * command-line editing with the built-in readline module
  * almost all standard Python 2.7 modules built-in
- * almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `spwd`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
+ * almost all standard C extensions built-in: `_bisect`, `_codecs`, `_codecs_cn`, `_codecs_hk`, `_codecs_iso2022`, `_codecs_jp`, `_codecs_kr`, `_codecs_tw`, `_collections`, `_csv`, `_curses`, `_elementtree`, `_functools`, `_heapq`, `_hotshot`, `_io`, `_json`, `_locale`, `_lsprof`, `_md5`, `_multibytecodec`, `_multiprocessing`, `_random`, `_sha`, `_sha256`, `_sha512`, `_socket`, `_sockobject`, `_sqlite3` (added 1004307 bytes to the executable binary size), `_sre`, `_struct`, `_symtable`, `_weakref`, `array`, `audioop`, `binascii`, `bz2`, `cPickle`, `cStringIO`, `cmath`, `crypt`, `datetime`, `errno`, `fcntl`, `fpectl`, `future_builtins`, `gc`, `grp`, `imageop`, `itertools`, `math`, `mmap`, `operator`, `parser`, `posix`, `pwd`, `pyexpat`, `readline`, `resource`, `select`, `signal`, `strop`, `syslog`, `termios`, `thread`, `time`, `timing`, `zipimport`, `zlib`
+ * built-in C extension `spwd` (for shadow password files) built in for Linux, but missing on the Mac OS X
  * greenlet integrated for coroutine support
  * the `stackless2.7-static` binary has Stackless Python (includinging the `stackless` module) integrated for high performance coroutine support
  * multithreading (using thread and threading as usual)
- * line editing even without a terminfo definition or inputrc file
-   (useful in chroot, provided by libreadline/libncurses by default)
+ * line editing even without a terminfo definition or inputrc file (useful in chroot, provided by libreadline/libncurses by default)
  * the usual help, license used in interactive mode
- * the `stacklessco2.7-static' binary (stacklessco) has the following coroutine-based I/O modules built in: gevent-0.3.12, gevent-MySQL (GIT snapshot on 20110221, works with gevent and Syncless), syncless-0.20, concurrence-0.3.1 (including the MySQL client)
- * the `stacklessco2.7-static' binary (stacklessco) has the following crypto modules built in: pycrypto-2.3, alo-aes-0.3
+ * the `stacklessco2.7-static` binary (stacklessco) has the following coroutine-based I/O modules built in: gevent-0.3.12, gevent-MySQL (GIT snapshot on 20110221, works with gevent and Syncless), syncless-0.22, concurrence-0.3.1 (including the MySQL client)
+ * the `stacklessco2.7-static` binary (stacklessco) has the following crypto modules built in: pycrypto-2.3, alo-aes-0.3
 
 == Executable binary layout ==
+
+The following comments apply to the Linux version, but the Mac OS X version has similar properties.
 
  * Python 2.7 (`r27:82500`) on Linux i386, statically linked
  * Stackless Python 2.7 (`Stackless 3.1b3 060516 release27-maint`) on Linux i386, statically linked

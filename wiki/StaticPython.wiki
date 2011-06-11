@@ -74,7 +74,7 @@ As a preparation on FreeBSD 8.1, please run `kldload linux` as root to load the 
 
 See more about [http://www.freebsd.org/doc/handbook/linuxemu-lbc-install.html installing Linux Binary Compatibility]. Please note that it's not necessary to install any Linux runtime libraries (e.g. *linux_base*), since the !StaticPython binaries contains all the code they need.
 
-Please note that the Linux emulation in FreeBSD is incomplete, e.g. it doesn't emulate [http://linux.die.net/man/4/epoll epoll(4)], so e.g. `select.epoll()` wouldn't work (but it would raise <i>IOError: [Errno 38] Function not implemented</i>). This doesn't cause any problems with the <i>syncless</i> or <i>gevent</i> modules in stacklessco2.7-static, because they use <i>libevent2</i>, which reverts by default to [http://linux.die.net/man/4/epoll poll(2)] if <i>epoll(4)</i> is not available, and FreeBSD emulates <i>poll(2)</i> properly.
+Please note that the Linux emulation in FreeBSD is incomplete, e.g. it doesn't emulate [http://linux.die.net/man/4/epoll epoll(4)], so e.g. `select.epoll()` wouldn't work (but it would raise <i>IOError: &#91;Errno 38] Function not implemented</i>). This doesn't cause any problems with the <i>syncless</i> or <i>gevent</i> modules in stacklessco2.7-static, because they use <i>libevent2</i>, which reverts by default to [http://linux.die.net/man/4/epoll poll(2)] if <i>epoll(4)</i> is not available, and FreeBSD emulates <i>poll(2)</i> properly.
 
 = For what purpose is !StaticPython useful? =
 

@@ -6,7 +6,7 @@
 
 !StaticPython is similar to <a href="http://www.portablepython.com/">Portable Python</a>, except that !StaticPython runs on Linux instead of Windows, and it has Stackless Python, greenlet and coroutine-based I/O library support.
 
-!StaticPython is a bit similar to <a href="http://pypi.python.org/pypi/bbfreeze">bbfreeze</a> and <a href="http://www.pyinstaller.org">PyInstaller</a>, but !StaticPython contains the Python interpreter, all the `.py` library files and all the built-in C extensions in a single executable file (while bbfreeze generates a separate `.so` file for each C extension library), and it doesn't contain any application-specific `.py` or `.pyc` files.
+!StaticPython is a bit similar to <a href="http://pypi.python.org/pypi/bbfreeze">bbfreeze</a> and <a href="http://www.pyinstaller.org">!PyInstaller</a>, but !StaticPython contains the Python interpreter, all the `.py` library files and all the built-in C extensions in a single executable file (while bbfreeze generates a separate `.so` file for each C extension library), and it doesn't contain any application-specific `.py` or `.pyc` files.
 
 Here is how to use !StaticPython:
 

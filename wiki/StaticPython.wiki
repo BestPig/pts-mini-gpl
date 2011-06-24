@@ -55,7 +55,7 @@ The latest release can be downloaded here (pick the one which best suits your ne
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessco2.7-static">stacklessco2.7</a>: the !StaticPython 2.7.x Stackless + greenlet + Coroutine-based I/O + OpenSSL + Crypto executable binary
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/python3.2-static">python3.2</a>: the !StaticPython 3.2.x normal (non-Stackless) executable binary, with greenlet
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stackless3.2-static">stackless3.2</a>: the !StaticPython 3.2.x Stackless executable binary, with greenlet
-  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessxl3.2-static">the !StaticPython 3.2.x Stackless + greenlet + OpenSSL executable binary
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release/stacklessxl3.2-static">stacklessxl3.2</a>: the !StaticPython 3.2.x Stackless + greenlet + OpenSSL executable binary
 
 
 = Download for Mac OS X =
@@ -67,7 +67,7 @@ The latest release can be downloaded here (pick the one which best suits your ne
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/python2.7-static">python2.7</a>: the !StaticPython 2.7.x normal (non-Stackless) executable binary, with greenlet
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stackless2.7-static">stackless2.7</a>: the !StaticPython 2.7.x Stackless executable binary, with greenlet
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stacklessco2.7-static">stacklessco2.7</a>: the !StaticPython 2.7.x Stackless + greenlet + Coroutine-based I/O + Crypto executable binary
-  * Python 3.2 binaries are not released yet, although they can probably be built using <i>build.sh</i>
+  * Python 3.2 binaries have not been released yet, although they can probably be built using <i>build.sh</i>
 
 = Download for FreeBSD =
 

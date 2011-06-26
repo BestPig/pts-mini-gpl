@@ -160,5 +160,4 @@ The following comments apply to the Linux version, but the Mac OS X version has 
 
 == Documentation ==
 
- * [http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/doc/slides_2011-06-23/pts_staticpython_2011-06-23.html Precompiling and deploying Python
-to any Linux, FreeBSD or Mac OS X system] (slides on EuroPython 2011)
+ * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/doc/slides_2011-06-23/pts_staticpython_2011-06-23.html">Precompiling and deploying Python to any Linux, FreeBSD or Mac OS X system</a> (slides on EuroPython 2011)

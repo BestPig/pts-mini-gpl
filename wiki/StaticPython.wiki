@@ -67,7 +67,9 @@ The latest release can be downloaded here (pick the one which best suits your ne
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/python2.7-static">python2.7</a>: the !StaticPython 2.7.x normal (non-Stackless) executable binary, with greenlet
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stackless2.7-static">stackless2.7</a>: the !StaticPython 2.7.x Stackless executable binary, with greenlet
   * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stacklessco2.7-static">stacklessco2.7</a>: the !StaticPython 2.7.x Stackless + greenlet + Coroutine-based I/O + Crypto executable binary
-  * Python 3.2 binaries have not been released yet, although they can probably be built using <i>build.sh</i>
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/python3.2-static">python3.2</a>: the !StaticPython 3.2.x normal (non-Stackless) executable binary, with greenlet
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stackless3.2-static">stackless3.2</a>: the !StaticPython 3.2.x Stackless executable binary, with greenlet
+  * <a href="http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/release.darwin/stacklessxl3.2-static">stacklessxl3.2</a>: the !StaticPython 3.2.x Stackless + greenlet + OpenSSL executable binary
 
 = Download for FreeBSD =
 
@@ -155,3 +157,8 @@ The following comments apply to the Linux version, but the Mac OS X version has 
  * missing: GUI bindings (tkinter, GTK, Qt etc.)
  * missing: release for Microsoft Windows
  * missing: release for non-i386, non-amd64 architectures
+
+== Documentation ==
+
+ * [http://pts-mini-gpl.googlecode.com/svn/trunk/staticpython/doc/slides_2011-06-23/pts_staticpython_2011-06-23.html Precompiling and deploying Python
+to any Linux, FreeBSD or Mac OS X system] (slides on EuroPython 2011)

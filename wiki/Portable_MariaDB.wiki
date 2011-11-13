@@ -41,7 +41,7 @@ It is strongly recommended to change the password of root to a non-empty, strong
 
 == Java support ==
 
-Java clients with JDBC (MySQL Connector/J) are fully supported. Please note that Java doesn't support Unix doman socket, so make sure in my.cnf that mysqld listens on a TCP port. Please make sure you have ?characterEncoding=UTF8` specified in your JDBC connection URL, otherwise some non-ASCII, non-Latin-1 characters would be converted to `?`.
+Java clients with JDBC (MySQL Connector/J) are fully supported. Please note that Java doesn't support Unix doman socket, so make sure in my.cnf that mysqld listens on a TCP port. Please make sure you have `?characterEncoding=UTF8` specified in your JDBC connection URL, otherwise some non-ASCII, non-Latin-1 characters would be converted to `?`.
 
 == Unicode support ==
 

@@ -1,4 +1,5 @@
 #summary Portable MariaDB: Small, portable binary MariaDB distribution for Linux
+#labels Featured
 
 Portable MariaDB is a small, portable binary distribution of the SQL server MariaDB (Monty's fork of MySQL) for Linux i386 (32-bit). Only the mysqld binary and a versatile init script are included. Portable MariaDB can be run by any user in any directory, it doesn't try to access any mysqld data or config files outside its directory. Portable MariaDB can coexist with regular mysqld (MySQL or MariaDB) and other instances of Portable MariaDB on a single machine, as long as they are not configured to listen on the same TCP port. The only dependency of Portable MariaDB is glibc 2.4 (available in Ubuntu Hardy or later).
 

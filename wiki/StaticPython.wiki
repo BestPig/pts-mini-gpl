@@ -1,4 +1,5 @@
 #summary Statically linked Python 2.x, 3.x and Stackless for 32-bit Linux, Mac OS X and FreeBSD
+#labels Featured
 
 = What is !StaticPython? =
 

@@ -5,6 +5,8 @@
 
 !StaticPython is a statically linked version of the Python 2.x (currently 2.7.1) and 3.x (currently 3.2) and Stackless Python interpreters and their standard modules for 32-bit (i686, i386, x86) Linux, Mac OS X and FreeBSD systems. It is distributed as single, statically linked 32-bit executable binaries, which contains the Python scripting engine, the interactive interpreter with command editing (readline), the Python debugger (pdb), most standard Python modules (including pure Python modules and C extensions), coroutine support using greenlet and multithreading support. The binary contains both the pure Python modules and the C extensions, so no additional `.py` or `.so` files are needed to run it. It also works in a chroot environment. The binary uses uClibc, so it supports username lookups and DNS lookups as well (without NSS).
 
+!StaticPython is similar to <a href="http://pypi.python.org/pypi/egenix-pyrun">!PyRun</a>, except that !StaticPython doesn't let you compile C extensions, and !PyRun needs several libraries (e.g. glibc, !OpenSSL, zlib, SQLite, bzip2) installed on the host, and !StaticPython doesn't need anything (it runs even if it's the only file on the filesystem).
+
 !StaticPython is similar to <a href="http://www.portablepython.com/">Portable Python</a>, except that !StaticPython runs on Linux instead of Windows, and it has Stackless Python, greenlet and coroutine-based I/O library support.
 
 !StaticPython is a bit similar to <a href="http://pypi.python.org/pypi/bbfreeze">bbfreeze</a> and <a href="http://www.pyinstaller.org">!PyInstaller</a>, but !StaticPython contains the Python interpreter, all the `.py` library files and all the built-in C extensions in a single executable file (while bbfreeze generates a separate `.so` file for each C extension library), and it doesn't contain any application-specific `.py` or `.pyc` files.
@@ -151,7 +153,7 @@ The following comments apply to the Linux version, but the Mac OS X version has 
 
 == Features missing ==
 
- * missing: loading .so files (C shared libraries, Python C extensions)
+ * missing: loading .so files (C shared libraries, Python C extensions); if you need that, try <a href="http://pypi.python.org/pypi/egenix-pyrun">!PyRun</a>
  * missing: the `ctypes` module and the `dl` module (since no `.so` file loading support)
  * missing: the `distutils` module, custom extension installation
  * missing: IPv6 support
